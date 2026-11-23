@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Sector9 QR Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      background-color: #ffffff;
+      color: #000000;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    @keyframes toastSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .toast-enter {
+      animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes skeletonPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .skeleton-box {
+      animation: skeletonPulse 1.4s ease-in-out infinite;
+    }
+    /* ApexCharts monochrome editorial overrides */
+    .apexcharts-tooltip {
+      border-radius: 0 !important;
+      border: 1px solid #000000 !important;
+      box-shadow: none !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 11px !important;
+    }
+    .apexcharts-tooltip-title {
+      border-radius: 0 !important;
+      background: #000000 !important;
+      color: #ffffff !important;
+      border-bottom: 1px solid #000000 !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 11px !important;
+    }
+    .apexcharts-menu {
+      border-radius: 0 !important;
+      border: 1px solid #000000 !important;
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-black selection:bg-black selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" aria-live="polite" class="fixed top-4 right-4 z-50 flex flex-col gap-2.5 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"></div>
+
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="mobile-backdrop" class="hidden fixed inset-0 z-30 bg-black/50 lg:hidden"></div>
+
+  <div class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- Sidebar Navigation (Desktop Fixed + Mobile Drawer) -->
+    <aside
+      id="sidebar"
+      aria-label="Navigasi Utama"
+      class="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-black flex flex-col justify-between transform -translate-x-full lg:translate-x-0 lg:static lg:shrink-0 transition-transform duration-200 ease-out"
+    >
+      <div>
+        <!-- Brand Header -->
+        <div class="h-16 px-5 border-b border-black flex items-center justify-between">
+          <a href="/dashboard" class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-7 h-7 bg-black text-white font-mono text-xs font-semibold tracking-tighter">
+              S9
+            </span>
+            <div>
+              <div class="font-bold text-sm tracking-tight uppercase leading-none">Sector9 QR</div>
+              <div class="font-mono text-[10px] text-neutral-500 tracking-widest uppercase mt-1">Control Console</div>
+            </div>
+          </a>
+          <button
+            type="button"
+            id="close-sidebar-btn"
+            aria-label="Tutup menu navigasi"
+            class="lg:hidden font-mono text-xs px-2 py-1 border border-black hover:bg-black hover:text-white transition-colors cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Section Label -->
+        <div class="px-5 pt-6 pb-2">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+            01 // NAVIGATION
+          </div>
+        </div>
+
+        <!-- Primary Navigation Links -->
+        <nav class="px-3 space-y-1">
+          <a
+            href="/dashboard"
+            aria-current="page"
+            class="flex items-center justify-between px-3 py-2.5 bg-black text-white border border-black font-mono text-xs uppercase tracking-wider font-medium"
+          >
+            <span>01. Dashboard</span>
+            <span>&rarr;</span>
+          </a>
+          <a
+            href="/manage-qr"
+            class="flex items-center justify-between px-3 py-2.5 bg-white text-black border border-transparent hover:border-black font-mono text-xs uppercase tracking-wider transition-colors"
+          >
+            <span>02. Manage QR</span>
+            <span class="text-neutral-400">/</span>
+          </a>
+          <a
+            href="/user-list"
+            class="flex items-center justify-between px-3 py-2.5 bg-white text-black border border-transparent hover:border-black font-mono text-xs uppercase tracking-wider transition-colors"
+          >
+            <span>03. User List</span>
+            <span class="text-neutral-400">/</span>
+          </a>
+        </nav>
+
+        <!-- Quick Action Box -->
+        <div class="px-3 mt-6">
+          <div class="border border-black p-3.5 bg-neutral-50">
+            <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-1.5">
+              Quick Provision
+            </div>
+            <p class="text-xs text-neutral-600 leading-relaxed mb-3">
+              Buat QR Code baru dengan batas kuota unik, PIN, dan masa berlaku WITA.
+            </p>
+            <a
+              href="/manage-qr?action=create"
+              class="block w-full text-center py-2 px-3 bg-white text-black border border-black font-mono text-[11px] uppercase tracking-wider font-semibold hover:bg-black hover:text-white transition-colors"
+            >
+              + Create QR Code
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Admin Session Info & Logout -->
+      <div class="border-t border-black p-4 bg-white">
+        <div class="mb-3">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+            Authenticated Admin
+          </div>
+          <div id="sidebar-admin-username" class="font-mono text-xs font-semibold text-black truncate mt-0.5">
+            memuat...
+          </div>
+          <div id="sidebar-admin-login" class="font-mono text-[10px] text-neutral-500 truncate mt-0.5">
+            Login: --
+          </div>
+        </div>
+        <button
+          type="button"
+          id="open-logout-modal-btn"
+          class="w-full py-2 px-3 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider font-medium hover:bg-black hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+        >
+          <span>Sign Out</span>
+          <span>[&rarr;]</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- Top Header Bar -->
+      <header class="h-16 bg-white border-b border-black px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            id="open-sidebar-btn"
+            aria-label="Buka menu navigasi"
+            class="lg:hidden inline-flex items-center justify-center w-9 h-9 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors font-mono text-xs cursor-pointer"
+          >
+            ☰
+          </button>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[11px] uppercase tracking-widest text-neutral-500 hidden sm:inline">
+                INDEX 01 /
+              </span>
+              <h1 class="text-base sm:text-lg font-bold tracking-tight text-black">
+                Analytics Overview
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 sm:gap-4">
+          <div class="hidden md:flex items-center gap-2 px-2.5 py-1 border border-neutral-300 bg-neutral-50 font-mono text-[11px] text-neutral-700">
+            <span class="inline-block w-1.5 h-1.5 bg-black"></span>
+            <span id="wita-clock">--:--:-- WITA</span>
+          </div>
+
+          <button
+            type="button"
+            id="refresh-dashboard-btn"
+            class="h-9 px-3 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white transition-colors inline-flex items-center gap-2 cursor-pointer"
+          >
+            <span id="refresh-icon">↻</span>
+            <span class="hidden sm:inline">Refresh</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content Container -->
+      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl w-full mx-auto space-y-8">
+
+        <!-- Error State Banner (Hidden by default) -->
+        <section
+          id="dashboard-error-state"
+          role="alert"
+          class="hidden border border-black bg-neutral-50 p-6 sm:p-8"
+        >
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+              <div class="inline-block font-mono text-[11px] uppercase tracking-widest bg-black text-white px-2 py-0.5">
+                DATA FETCH ERROR
+              </div>
+              <h2 class="text-lg font-bold text-black">Gagal Memuat Data Dashboard</h2>
+              <p id="dashboard-error-message" class="text-sm text-neutral-600">
+                Terjadi kesalahan saat mengambil statistik dashboard.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="retry-dashboard-btn"
+              class="shrink-0 px-5 py-2.5 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              Coba Lagi &rarr;
+            </button>
+          </div>
+        </section>
+
+        <!-- Loading Skeleton State -->
+        <section id="dashboard-loading-skeleton" aria-label="Memuat statistik" class="space-y-8">
+          <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+            <div class="border border-neutral-300 p-4 space-y-3 skeleton-box">
+              <div class="h-3 w-20 bg-neutral-200"></div>
+              <div class="h-8 w-14 bg-neutral-300"></div>
+              <div class="h-2.5 w-24 bg-neutral-200"></div>
+            </div>
+          </div>
+
+          <div class="border border-neutral-300 p-6 h-80 skeleton-box flex flex-col justify-between">
+            <div class="h-4 w-48 bg-neutral-200"></div>
+            <div class="h-56 w-full bg-neutral-100"></div>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div class="border border-neutral-300 p-6 h-72 skeleton-box"></div>
+            <div class="border border-neutral-300 p-6 h-72 skeleton-box"></div>
+          </div>
+        </section>
+
+        <!-- Loaded Dashboard Content -->
+        <div id="dashboard-content" class="hidden space-y-8">
+
+          <!-- Section 1: KPI Statistics Grid -->
+          <section aria-labelledby="kpi-heading">
+            <div class="flex items-center justify-between mb-3.5">
+              <h2 id="kpi-heading" class="font-mono text-xs uppercase tracking-widest text-neutral-500">
+                01 // SYSTEM METRICS SUMMARY
+              </h2>
+              <span class="font-mono text-[11px] text-neutral-400">REAL-TIME COUNTERS</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 border-t border-l border-black">
+              <!-- Stat 1: Total QR Code -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-500">Total QR Code</span>
+                  <span class="font-mono text-[10px] text-neutral-400">01</span>
+                </div>
+                <div id="stat-total-qr" class="text-3xl sm:text-4xl font-bold tracking-tight text-black my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-500">
+                  Total QR dibuat
+                </div>
+              </article>
+
+              <!-- Stat 2: QR Code Aktif -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-500">QR Aktif</span>
+                  <span class="inline-block w-2 h-2 bg-black"></span>
+                </div>
+                <div id="stat-active-qr" class="text-3xl sm:text-4xl font-bold tracking-tight text-black my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-500">
+                  Siap menerima akses
+                </div>
+              </article>
+
+              <!-- Stat 3: QR Code Expired -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-500">QR Expired</span>
+                  <span class="font-mono text-[10px] text-neutral-400">03</span>
+                </div>
+                <div id="stat-expired-qr" class="text-3xl sm:text-4xl font-bold tracking-tight text-black my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-500">
+                  Melewati batas waktu
+                </div>
+              </article>
+
+              <!-- Stat 4: QR Limit Reached -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-500">Limit Reached</span>
+                  <span class="font-mono text-[10px] text-neutral-400">04</span>
+                </div>
+                <div id="stat-limit-qr" class="text-3xl sm:text-4xl font-bold tracking-tight text-black my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-500">
+                  Kuota akses penuh
+                </div>
+              </article>
+
+              <!-- Stat 5: Total Unique Scans -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-neutral-950 text-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-300">Unique Scans</span>
+                  <span class="font-mono text-[10px] text-neutral-400">05</span>
+                </div>
+                <div id="stat-unique-scans" class="text-3xl sm:text-4xl font-bold tracking-tight text-white my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-400">
+                  Pengunjung unik terhitung
+                </div>
+              </article>
+
+              <!-- Stat 6: Total User Submit Identitas -->
+              <article class="p-4 sm:p-5 border-r border-b border-black bg-white flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-neutral-500">User Identitas</span>
+                  <span class="font-mono text-[10px] text-neutral-400">06</span>
+                </div>
+                <div id="stat-submitted-users" class="text-3xl sm:text-4xl font-bold tracking-tight text-black my-3 font-mono">
+                  0
+                </div>
+                <div class="font-mono text-[11px] text-neutral-500">
+                  Form &amp; KTP terkirim
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- Section 2: ApexCharts Visual Analytics -->
+          <section aria-labelledby="charts-heading" class="space-y-6">
+            <div class="flex items-center justify-between">
+              <h2 id="charts-heading" class="font-mono text-xs uppercase tracking-widest text-neutral-500">
+                02 // TRAFFIC &amp; CONVERSION ANALYTICS
+              </h2>
+              <span class="font-mono text-[11px] text-neutral-400">APEXCHARTS ENGINE</span>
+            </div>
+
+            <!-- Chart 1: Scan Analytics Over Time (14 Days) -->
+            <div class="border border-black bg-white p-5 sm:p-6">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-neutral-200">
+                <div>
+                  <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                    CHART A // TIME-SERIES (14 HARI TERAKHIR - WITA)
+                  </div>
+                  <h3 class="text-base font-bold tracking-tight text-black mt-0.5">
+                    Scan Analytics Berdasarkan Waktu
+                  </h3>
+                </div>
+                <div class="flex items-center gap-4 font-mono text-[11px]">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-3 h-0.5 bg-black inline-block"></span> Unique Access
+                  </span>
+                  <span class="inline-flex items-center gap-1.5 text-neutral-500">
+                    <span class="w-3 h-0.5 bg-neutral-400 inline-block border-t border-dashed border-neutral-500"></span> Identitas Submitted
+                  </span>
+                </div>
+              </div>
+              <div id="chart-scans-timeline" class="w-full min-h-[290px]"></div>
+            </div>
+
+            <!-- Chart 2 & Chart 3 Grid -->
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <!-- Chart 2: Top Used QR Codes -->
+              <div class="border border-black bg-white p-5 sm:p-6 flex flex-col justify-between">
+                <div class="pb-4 mb-4 border-b border-neutral-200">
+                  <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                    CHART B // QUOTA UTILIZATION
+                  </div>
+                  <h3 class="text-base font-bold tracking-tight text-black mt-0.5">
+                    QR Code Paling Banyak Digunakan
+                  </h3>
+                  <p class="text-xs text-neutral-500 mt-1">
+                    Perbandingan Unique Access terpakai terhadap Maximal User Access.
+                  </p>
+                </div>
+                <div id="chart-top-qr" class="w-full min-h-[290px]"></div>
+              </div>
+
+              <!-- Chart 3: User Submissions Comparison per QR Code -->
+              <div class="border border-black bg-white p-5 sm:p-6 flex flex-col justify-between">
+                <div class="pb-4 mb-4 border-b border-neutral-200">
+                  <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                    CHART C // IDENTITY CONVERSION
+                  </div>
+                  <h3 class="text-base font-bold tracking-tight text-black mt-0.5">
+                    Perbandingan User Berdasarkan QR Code
+                  </h3>
+                  <p class="text-xs text-neutral-500 mt-1">
+                    Jumlah user yang menyelesaikan verifikasi identitas dibandingkan total unique access.
+                  </p>
+                </div>
+                <div id="chart-users-qr" class="w-full min-h-[290px]"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Section 3: Recent QR Codes Table -->
+          <section aria-labelledby="recent-qr-heading" class="border border-black bg-white">
+            <div class="p-5 sm:p-6 border-b border-black flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  03 // RECENTLY PROVISIONED ENDPOINTS
+                </div>
+                <h2 id="recent-qr-heading" class="text-base sm:text-lg font-bold tracking-tight text-black mt-0.5">
+                  QR Code Terbaru
+                </h2>
+              </div>
+
+              <div class="flex items-center gap-2.5">
+                <a
+                  href="/manage-qr"
+                  class="px-3.5 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white transition-colors"
+                >
+                  Lihat Semua QR &rarr;
+                </a>
+              </div>
+            </div>
+
+            <!-- Empty State (Shown when 0 QR codes exist) -->
+            <div id="recent-qr-empty" class="hidden p-10 sm:p-14 text-center">
+              <div class="inline-block font-mono text-xs uppercase tracking-widest border border-black px-2.5 py-1 mb-3">
+                EMPTY REGISTRY
+              </div>
+              <h3 class="text-base font-bold text-black mb-1.5">Belum Ada QR Code</h3>
+              <p class="text-xs sm:text-sm text-neutral-600 max-w-md mx-auto mb-5 leading-relaxed">
+                Database belum memiliki data QR Code. Buat QR Code pertama Anda untuk mulai memantau traffic scan dan verifikasi pengguna.
+              </p>
+              <a
+                href="/manage-qr?action=create"
+                class="inline-block px-5 py-2.5 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest hover:bg-neutral-800 transition-colors"
+              >
+                + Buat QR Code Pertama
+              </a>
+            </div>
+
+            <!-- Responsive Table Wrapper -->
+            <div id="recent-qr-table-wrapper" class="overflow-x-auto">
+              <table class="w-full text-left border-collapse min-w-[880px]">
+                <thead>
+                  <tr class="border-b border-black bg-neutral-50 font-mono text-[11px] uppercase tracking-wider text-neutral-600">
+                    <th class="py-3.5 px-4 font-semibold">Nama QR &amp; Slug</th>
+                    <th class="py-3.5 px-4 font-semibold">Link Tujuan</th>
+                    <th class="py-3.5 px-4 font-semibold">Kuota Unique Access</th>
+                    <th class="py-3.5 px-4 font-semibold">Identitas</th>
+                    <th class="py-3.5 px-4 font-semibold">Expired (WITA)</th>
+                    <th class="py-3.5 px-4 font-semibold">Status</th>
+                    <th class="py-3.5 px-4 font-semibold text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-qr-tbody" class="divide-y divide-neutral-200 text-xs">
+                  <!-- Rows populated dynamically via JS -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </main>
+
+      <!-- Footer -->
+      <footer class="border-t border-neutral-200 bg-white px-4 sm:px-6 lg:px-8 py-4">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 font-mono text-[11px] text-neutral-500">
+          <span>SECTOR9 QR // ENTERPRISE ACCESS &amp; REDIRECT ENGINE</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Custom Confirmation Modal: Logout -->
+  <div
+    id="logout-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="logout-modal-title"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+  >
+    <div class="w-full max-w-sm bg-white border border-black">
+      <div class="px-5 py-4 border-b border-black flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[10px] bg-black text-white px-1.5 py-0.5 uppercase">AUTH</span>
+          <h3 id="logout-modal-title" class="font-semibold text-sm tracking-tight text-black">
+            Konfirmasi Sign Out
+          </h3>
+        </div>
+        <button
+          type="button"
+          id="close-logout-modal-btn"
+          aria-label="Tutup modal logout"
+          class="font-mono text-xs text-neutral-500 hover:text-black px-1.5 py-0.5 cursor-pointer"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="p-5 text-sm text-neutral-700 leading-relaxed">
+        Sesi admin Anda akan dicabut dari server dan cookie autentikasi akan dihapus. Lanjutkan keluar dari sistem?
+      </div>
+
+      <div class="px-5 py-3.5 border-t border-neutral-200 bg-neutral-50 flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          id="cancel-logout-btn"
+          class="px-4 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-neutral-100 transition-colors cursor-pointer"
+        >
+          Batal
+        </button>
+        <button
+          type="button"
+          id="confirm-logout-btn"
+          class="px-4 py-2 border border-black bg-black text-white font-mono text-xs uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-50 transition-colors cursor-pointer"
+        >
+          Ya, Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ======================================================================
+      // STATE & CHART INSTANCES
+      // ======================================================================
+      let csrfToken = '';
+      let chartTimelineInstance = null;
+      let chartTopQrInstance = null;
+      let chartUsersQrInstance = null;
+
+      // ======================================================================
+      // 1. LIVE WITA CLOCK
+      // ======================================================================
+      const clockEl = document.getElementById('wita-clock');
+      function updateWitaClock() {
+        if (!clockEl) return;
+        try {
+          const formatted = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Makassar',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).format(new Date());
+          clockEl.textContent = formatted + ' WITA';
+        } catch {
+          clockEl.textContent = 'ASIA/MAKASSAR';
+        }
+      }
+      updateWitaClock();
+      setInterval(updateWitaClock, 1000);
+
+      // ======================================================================
+      // 2. UTILITIES & TOAST NOTIFICATIONS
+      // ======================================================================
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function formatNumber(num) {
+        return new Intl.NumberFormat('id-ID').format(Number(num) || 0);
+      }
+
+      const toastContainer = document.getElementById('toast-container');
+      function showToast(type, title, message, duration = 4000) {
+        if (!toastContainer) return;
+
+        const variants = {
+          success: { badge: 'OK', border: 'border-black', badgeBg: 'bg-black text-white' },
+          error: { badge: 'ERR', border: 'border-black', badgeBg: 'bg-black text-white' },
+          warning: { badge: 'WARN', border: 'border-black', badgeBg: 'bg-neutral-800 text-white' },
+          info: { badge: 'INFO', border: 'border-neutral-400', badgeBg: 'bg-neutral-200 text-black' }
+        };
+
+        const style = variants[type] || variants.info;
+        const toast = document.createElement('div');
+        toast.className = `toast-enter pointer-events-auto bg-white border ${style.border} p-3.5 flex items-start justify-between gap-3`;
+        toast.setAttribute('role', 'status');
+
+        toast.innerHTML = `
+          <div class="flex items-start gap-2.5 min-w-0">
+            <span class="font-mono text-[10px] font-semibold px-1.5 py-0.5 shrink-0 ${style.badgeBg}">
+              ${escapeHtml(style.badge)}
+            </span>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-black tracking-tight">${escapeHtml(title)}</div>
+              <div class="text-xs text-neutral-600 mt-0.5 break-words leading-snug">${escapeHtml(message)}</div>
+            </div>
+          </div>
+          <button type="button" aria-label="Tutup notifikasi" class="font-mono text-xs text-neutral-400 hover:text-black shrink-0 cursor-pointer">
+            ✕
+          </button>
+        `;
+
+        const removeToast = () => {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        };
+
+        toast.querySelector('button').addEventListener('click', removeToast);
+        toastContainer.appendChild(toast);
+
+        if (duration > 0) {
+          setTimeout(removeToast, duration);
+        }
+      }
+
+      // ======================================================================
+      // 3. MOBILE SIDEBAR DRAWER & LOGOUT MODAL
+      // ======================================================================
+      const sidebar = document.getElementById('sidebar');
+      const mobileBackdrop = document.getElementById('mobile-backdrop');
+      const openSidebarBtn = document.getElementById('open-sidebar-btn');
+      const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+
+      function openMobileSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        mobileBackdrop.classList.remove('hidden');
+      }
+
+      function closeMobileSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        mobileBackdrop.classList.add('hidden');
+      }
+
+      openSidebarBtn.addEventListener('click', openMobileSidebar);
+      closeSidebarBtn.addEventListener('click', closeMobileSidebar);
+      mobileBackdrop.addEventListener('click', closeMobileSidebar);
+
+      // Logout Modal
+      const logoutModal = document.getElementById('logout-modal');
+      const openLogoutModalBtn = document.getElementById('open-logout-modal-btn');
+      const closeLogoutModalBtn = document.getElementById('close-logout-modal-btn');
+      const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
+      const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
+
+      function openLogoutModal() {
+        closeMobileSidebar();
+        logoutModal.classList.remove('hidden');
+        confirmLogoutBtn.focus();
+      }
+
+      function closeLogoutModal() {
+        logoutModal.classList.add('hidden');
+      }
+
+      openLogoutModalBtn.addEventListener('click', openLogoutModal);
+      closeLogoutModalBtn.addEventListener('click', closeLogoutModal);
+      cancelLogoutBtn.addEventListener('click', closeLogoutModal);
+      logoutModal.addEventListener('click', (e) => {
+        if (e.target === logoutModal) closeLogoutModal();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (!logoutModal.classList.contains('hidden')) closeLogoutModal();
+          if (!mobileBackdrop.classList.contains('hidden')) closeMobileSidebar();
+        }
+      });
+
+      confirmLogoutBtn.addEventListener('click', async () => {
+        confirmLogoutBtn.disabled = true;
+        confirmLogoutBtn.textContent = 'Memproses...';
+        try {
+          const res = await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken
+            }
+          });
+          const data = await res.json().catch(() => ({}));
+          window.location.replace(data.redirect || '/');
+        } catch {
+          window.location.replace('/');
+        }
+      });
+
+      // ======================================================================
+      // 4. RENDER STATUS BADGE (MONOCHROME EDITORIAL)
+      // ======================================================================
+      function renderStatusBadge(status) {
+        const normalized = String(status || 'Active');
+        if (normalized === 'Active') {
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-black text-white border border-black font-mono text-[10px] uppercase tracking-wider font-semibold">
+              <span class="w-1.5 h-1.5 bg-white inline-block"></span>
+              Active
+            </span>
+          `;
+        }
+        if (normalized === 'Limit Reached') {
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-100 text-black border-2 border-black font-mono text-[10px] uppercase tracking-wider font-bold">
+              Limit Reached
+            </span>
+          `;
+        }
+        if (normalized === 'Expired') {
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-neutral-600 border border-dashed border-neutral-500 font-mono text-[10px] uppercase tracking-wider">
+              Expired
+            </span>
+          `;
+        }
+        return `
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-200 text-neutral-600 border border-neutral-300 font-mono text-[10px] uppercase tracking-wider">
+            Disabled
+          </span>
+        `;
+      }
+
+      // ======================================================================
+      // 5. RENDER RECENT QR CODES TABLE
+      // ======================================================================
+      function renderRecentQrTable(qrList) {
+        const emptyEl = document.getElementById('recent-qr-empty');
+        const tableWrapper = document.getElementById('recent-qr-table-wrapper');
+        const tbody = document.getElementById('recent-qr-tbody');
+
+        if (!Array.isArray(qrList) || qrList.length === 0) {
+          emptyEl.classList.remove('hidden');
+          tableWrapper.classList.add('hidden');
+          tbody.innerHTML = '';
+          return;
+        }
+
+        emptyEl.classList.add('hidden');
+        tableWrapper.classList.remove('hidden');
+
+        tbody.innerHTML = qrList.map((qr) => {
+          const uniqueAccess = Number(qr.unique_access) || 0;
+          const maxAccess = Number(qr.max_access) || 1;
+          const remainingAccess = Number(qr.remaining_access) ?? Math.max(0, maxAccess - uniqueAccess);
+          const pct = Math.min(100, Math.round((uniqueAccess / maxAccess) * 100));
+
+          const pinTag = qr.pin_enabled
+            ? `<span class="font-mono text-[10px] px-1.5 py-0.5 border border-black bg-neutral-100 text-black">PIN</span>`
+            : '';
+          const styleTag = qr.style_type === 'card'
+            ? `<span class="font-mono text-[10px] px-1.5 py-0.5 border border-neutral-300 text-neutral-600">CARD</span>`
+            : `<span class="font-mono text-[10px] px-1.5 py-0.5 border border-neutral-300 text-neutral-600">ORIG</span>`;
+
+          return `
+            <tr class="hover:bg-neutral-50/90 transition-colors">
+              <td class="py-3.5 px-4 align-top">
+                <div class="font-semibold text-black text-xs sm:text-sm">${escapeHtml(qr.name)}</div>
+                <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                  <code class="font-mono text-[11px] text-neutral-600">/r/${escapeHtml(qr.slug)}</code>
+                  ${styleTag}
+                  ${pinTag}
+                </div>
+              </td>
+              <td class="py-3.5 px-4 align-top max-w-[220px]">
+                <a
+                  href="${escapeHtml(qr.destination_url)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="${escapeHtml(qr.destination_url)}"
+                  class="block truncate font-mono text-[11px] text-neutral-700 hover:text-black underline underline-offset-2"
+                >
+                  ${escapeHtml(qr.destination_url)}
+                </a>
+                <div class="font-mono text-[10px] text-neutral-400 mt-1">
+                  Raw hits: ${formatNumber(qr.total_scans)}
+                </div>
+              </td>
+              <td class="py-3.5 px-4 align-top min-w-[180px]">
+                <div class="flex items-center justify-between font-mono text-[11px] mb-1">
+                  <span class="font-semibold text-black">${formatNumber(uniqueAccess)} / ${formatNumber(maxAccess)}</span>
+                  <span class="text-neutral-500">Sisa: ${formatNumber(remainingAccess)}</span>
+                </div>
+                <div class="w-full h-1.5 bg-neutral-200 overflow-hidden">
+                  <div class="h-full bg-black" style="width: ${pct}%"></div>
+                </div>
+              </td>
+              <td class="py-3.5 px-4 align-top font-mono">
+                <span class="font-semibold text-black">${formatNumber(qr.submitted_users)}</span>
+                <span class="text-neutral-400 text-[11px]"> user</span>
+              </td>
+              <td class="py-3.5 px-4 align-top font-mono text-[11px] text-neutral-700 whitespace-nowrap">
+                ${escapeHtml(qr.expires_at_wita || '-')}
+              </td>
+              <td class="py-3.5 px-4 align-top whitespace-nowrap">
+                ${renderStatusBadge(qr.status)}
+              </td>
+              <td class="py-3.5 px-4 align-top text-right whitespace-nowrap">
+                <div class="inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-copy-url="${escapeHtml(qr.qr_url)}"
+                    class="copy-qr-url-btn px-2.5 py-1.5 border border-black bg-white text-black font-mono text-[10px] uppercase tracking-wider hover:bg-black hover:text-white transition-colors cursor-pointer"
+                  >
+                    Copy URL
+                  </button>
+                  <a
+                    href="/manage-qr"
+                    class="px-2.5 py-1.5 border border-neutral-300 bg-white text-neutral-700 font-mono text-[10px] uppercase tracking-wider hover:border-black hover:text-black transition-colors"
+                  >
+                    Kelola
+                  </a>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.querySelectorAll('.copy-qr-url-btn').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const url = btn.getAttribute('data-copy-url');
+            try {
+              await navigator.clipboard.writeText(url);
+              showToast('success', 'URL Disalin', url, 2600);
+            } catch {
+              showToast('warning', 'Gagal Menyalin', 'Salin manual: ' + url, 3500);
+            }
+          });
+        });
+      }
+
+      // ======================================================================
+      // 6. APEXCHARTS RENDERERS (MONOCHROME JAPANESE EDITORIAL THEME)
+      // ======================================================================
+      function renderCharts(chartsData) {
+        if (typeof ApexCharts === 'undefined') return;
+
+        // Destroy existing instances on refresh
+        if (chartTimelineInstance) {
+          chartTimelineInstance.destroy();
+          chartTimelineInstance = null;
+        }
+        if (chartTopQrInstance) {
+          chartTopQrInstance.destroy();
+          chartTopQrInstance = null;
+        }
+        if (chartUsersQrInstance) {
+          chartUsersQrInstance.destroy();
+          chartUsersQrInstance = null;
+        }
+
+        // --- CHART 1: Scans & Submissions Over Time (Area / Line) ---
+        const timelineEl = document.getElementById('chart-scans-timeline');
+        const dates = chartsData?.scans_over_time?.dates || [];
+        const scans = chartsData?.scans_over_time?.scans || [];
+        const submissions = chartsData?.scans_over_time?.submissions || [];
+
+        const shortDates = dates.map((d) => d.slice(5)); // MM-DD
+
+        chartTimelineInstance = new ApexCharts(timelineEl, {
+          chart: {
+            type: 'area',
+            height: 290,
+            fontFamily: 'JetBrains Mono, monospace',
+            toolbar: { show: false },
+            zoom: { enabled: false },
+            animations: { enabled: true, speed: 350 }
+          },
+          series: [
+            { name: 'Unique Access', data: scans },
+            { name: 'Identitas Submitted', data: submissions }
+          ],
+          colors: ['#000000', '#737373'],
+          stroke: {
+            curve: 'straight',
+            width: [2.5, 2],
+            dashArray: [0, 5]
+          },
+          fill: {
+            type: ['gradient', 'solid'],
+            gradient: {
+              shadeIntensity: 1,
+              opacityFrom: 0.14,
+              opacityTo: 0.01,
+              stops: [0, 100]
+            },
+            opacity: [0.15, 0]
+          },
+          markers: {
+            size: 3,
+            colors: ['#000000', '#737373'],
+            strokeColors: '#ffffff',
+            strokeWidth: 1.5,
+            hover: { size: 5 }
+          },
+          dataLabels: { enabled: false },
+          grid: {
+            borderColor: '#e5e5e5',
+            strokeDashArray: 3,
+            xaxis: { lines: { show: false } }
+          },
+          xaxis: {
+            categories: shortDates,
+            axisBorder: { color: '#000000' },
+            axisTicks: { color: '#000000' },
+            labels: {
+              style: { colors: '#525252', fontSize: '11px' }
+            }
+          },
+          yaxis: {
+            min: 0,
+            forceNiceScale: true,
+            labels: {
+              formatter: (val) => Math.round(val),
+              style: { colors: '#525252', fontSize: '11px' }
+            }
+          },
+          legend: { show: false },
+          tooltip: {
+            shared: true,
+            intersect: false,
+            theme: 'light'
+          }
+        });
+        chartTimelineInstance.render();
+
+        // --- CHART 2: Top Used QR Codes (Horizontal Bar) ---
+        const topQrEl = document.getElementById('chart-top-qr');
+        const topNames = chartsData?.top_qr_codes?.names || [];
+        const topUnique = chartsData?.top_qr_codes?.unique_scans || [];
+        const topMax = chartsData?.top_qr_codes?.max_access || [];
+
+        if (topNames.length === 0) {
+          topQrEl.innerHTML = `
+            <div class="h-[290px] border border-dashed border-neutral-300 flex items-center justify-center p-6 text-center font-mono text-xs text-neutral-400">
+              BELUM ADA DATA PENGGUNAAN QR CODE
+            </div>
+          `;
+        } else {
+          topQrEl.innerHTML = '';
+          const truncatedNames = topNames.map((n) => (n.length > 18 ? n.slice(0, 18) + '…' : n));
+
+          chartTopQrInstance = new ApexCharts(topQrEl, {
+            chart: {
+              type: 'bar',
+              height: 290,
+              fontFamily: 'JetBrains Mono, monospace',
+              toolbar: { show: false }
+            },
+            series: [
+              { name: 'Unique Access', data: topUnique },
+              { name: 'Maximal Access', data: topMax }
+            ],
+            colors: ['#000000', '#d4d4d4'],
+            plotOptions: {
+              bar: {
+                horizontal: true,
+                borderRadius: 0,
+                barHeight: '62%',
+                dataLabels: { position: 'top' }
+              }
+            },
+            dataLabels: { enabled: false },
+            stroke: {
+              show: true,
+              width: 1,
+              colors: ['#000000']
+            },
+            grid: {
+              borderColor: '#e5e5e5',
+              strokeDashArray: 3
+            },
+            xaxis: {
+              categories: truncatedNames,
+              axisBorder: { color: '#000000' },
+              labels: {
+                formatter: (val) => Math.round(val),
+                style: { colors: '#525252', fontSize: '11px' }
+              }
+            },
+            yaxis: {
+              labels: {
+                style: { colors: '#000000', fontSize: '11px' }
+              }
+            },
+            legend: {
+              position: 'top',
+              horizontalAlign: 'left',
+              fontSize: '11px',
+              markers: { radius: 0 }
+            },
+            tooltip: {
+              shared: true,
+              intersect: false,
+              theme: 'light'
+            }
+          });
+          chartTopQrInstance.render();
+        }
+
+        // --- CHART 3: User Submissions vs Unique Access per QR Code (Grouped Column) ---
+        const usersQrEl = document.getElementById('chart-users-qr');
+        const userQrNames = chartsData?.users_by_qr?.names || [];
+        const submittedUsers = chartsData?.users_by_qr?.submitted_users || [];
+        const userQrUniqueScans = chartsData?.users_by_qr?.unique_scans || [];
+
+        if (userQrNames.length === 0) {
+          usersQrEl.innerHTML = `
+            <div class="h-[290px] border border-dashed border-neutral-300 flex items-center justify-center p-6 text-center font-mono text-xs text-neutral-400">
+              BELUM ADA DATA SUBMIT IDENTITAS USER
+            </div>
+          `;
+        } else {
+          usersQrEl.innerHTML = '';
+          const truncatedUserQrNames = userQrNames.map((n) => (n.length > 14 ? n.slice(0, 14) + '…' : n));
+
+          chartUsersQrInstance = new ApexCharts(usersQrEl, {
+            chart: {
+              type: 'bar',
+              height: 290,
+              fontFamily: 'JetBrains Mono, monospace',
+              toolbar: { show: false }
+            },
+            series: [
+              { name: 'User Submitted', data: submittedUsers },
+              { name: 'Unique Access', data: userQrUniqueScans }
+            ],
+            colors: ['#000000', '#a3a3a3'],
+            plotOptions: {
+              bar: {
+                horizontal: false,
+                columnWidth: '52%',
+                borderRadius: 0
+              }
+            },
+            dataLabels: { enabled: false },
+            stroke: {
+              show: true,
+              width: 1,
+              colors: ['#000000']
+            },
+            grid: {
+              borderColor: '#e5e5e5',
+              strokeDashArray: 3
+            },
+            xaxis: {
+              categories: truncatedUserQrNames,
+              axisBorder: { color: '#000000' },
+              labels: {
+                style: { colors: '#000000', fontSize: '10px' }
+              }
+            },
+            yaxis: {
+              min: 0,
+              forceNiceScale: true,
+              labels: {
+                formatter: (val) => Math.round(val),
+                style: { colors: '#525252', fontSize: '11px' }
+              }
+            },
+            legend: {
+              position: 'top',
+              horizontalAlign: 'left',
+              fontSize: '11px',
+              markers: { radius: 0 }
+            },
+            tooltip: {
+              shared: true,
+              intersect: false,
+              theme: 'light'
+            }
+          });
+          chartUsersQrInstance.render();
+        }
+      }
+
+      // ======================================================================
+      // 7. FETCH ADMIN PROFILE & DASHBOARD DATA
+      // ======================================================================
+      const skeletonEl = document.getElementById('dashboard-loading-skeleton');
+      const errorStateEl = document.getElementById('dashboard-error-state');
+      const errorMsgEl = document.getElementById('dashboard-error-message');
+      const contentEl = document.getElementById('dashboard-content');
+      const refreshBtn = document.getElementById('refresh-dashboard-btn');
+      const refreshIcon = document.getElementById('refresh-icon');
+      const retryBtn = document.getElementById('retry-dashboard-btn');
+
+      async function loadAdminSession() {
+        const res = await fetch('/api/auth/me', {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (res.status === 401) {
+          window.location.replace('/');
+          return null;
+        }
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Gagal memverifikasi sesi admin.');
+        }
+
+        csrfToken = data.csrfToken || '';
+        document.getElementById('sidebar-admin-username').textContent = data.admin?.username || 'admin';
+        document.getElementById('sidebar-admin-login').textContent = data.admin?.last_login_at
+          ? `Login: ${data.admin.last_login_at} WITA`
+          : 'Sesi aktif';
+
+        return data;
+      }
+
+      async function loadDashboardData(isManualRefresh = false) {
+        if (isManualRefresh) {
+          refreshBtn.disabled = true;
+          refreshIcon.classList.add('animate-spin');
+        } else {
+          skeletonEl.classList.remove('hidden');
+          errorStateEl.classList.add('hidden');
+          contentEl.classList.add('hidden');
+        }
+
+        try {
+          if (!csrfToken) {
+            const session = await loadAdminSession();
+            if (!session) return;
+          }
+
+          const res = await fetch('/api/admin/dashboard', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (res.status === 401) {
+            window.location.replace('/');
+            return;
+          }
+
+          const payload = await res.json();
+          if (!res.ok || !payload.success) {
+            throw new Error(payload.message || 'Gagal memuat statistik dashboard.');
+          }
+
+          const s = payload.summary || {};
+          document.getElementById('stat-total-qr').textContent = formatNumber(s.total_qr);
+          document.getElementById('stat-active-qr').textContent = formatNumber(s.active_qr);
+          document.getElementById('stat-expired-qr').textContent = formatNumber(s.expired_qr);
+          document.getElementById('stat-limit-qr').textContent = formatNumber(s.limit_reached_qr);
+          document.getElementById('stat-unique-scans').textContent = formatNumber(s.total_unique_scans);
+          document.getElementById('stat-submitted-users').textContent = formatNumber(s.total_submitted_users);
+
+
+          skeletonEl.classList.add('hidden');
+          errorStateEl.classList.add('hidden');
+          contentEl.classList.remove('hidden');
+
+          renderCharts(payload.charts);
+          renderRecentQrTable(payload.recent_qr_codes);
+
+          if (isManualRefresh) {
+            showToast('success', 'Data Diperbarui', 'Statistik terbaru berhasil dimuat dari database.', 2500);
+          }
+        } catch (err) {
+          skeletonEl.classList.add('hidden');
+          contentEl.classList.add('hidden');
+          errorMsgEl.textContent = err.message || 'Terjadi kesalahan saat menghubungi server.';
+          errorStateEl.classList.remove('hidden');
+
+          if (isManualRefresh) {
+            showToast('error', 'Gagal Memperbarui', err.message || 'Tidak dapat memuat data terbaru.');
+          }
+        } finally {
+          refreshBtn.disabled = false;
+          refreshIcon.classList.remove('animate-spin');
+        }
+      }
+
+      refreshBtn.addEventListener('click', () => loadDashboardData(true));
+      retryBtn.addEventListener('click', () => loadDashboardData(false));
+
+      window.addEventListener('DOMContentLoaded', () => {
+        loadDashboardData(false);
+      });
+    })();
+  </script>
+</body>
+</html>

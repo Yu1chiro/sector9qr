@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User List — Sector9 QR Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      background-color: #ffffff;
+      color: #000000;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    @keyframes toastSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .toast-enter {
+      animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes skeletonPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .skeleton-box {
+      animation: skeletonPulse 1.4s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-black selection:bg-black selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" aria-live="polite" class="fixed top-4 right-4 z-[60] flex flex-col gap-2.5 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"></div>
+
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="mobile-backdrop" class="hidden fixed inset-0 z-30 bg-black/50 lg:hidden"></div>
+
+  <div class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- Sidebar Navigation -->
+    <aside
+      id="sidebar"
+      aria-label="Navigasi Utama"
+      class="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-black flex flex-col justify-between transform -translate-x-full lg:translate-x-0 lg:static lg:shrink-0 transition-transform duration-200 ease-out"
+    >
+      <div>
+        <!-- Brand Header -->
+        <div class="h-16 px-5 border-b border-black flex items-center justify-between">
+          <a href="/dashboard" class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-7 h-7 bg-black text-white font-mono text-xs font-semibold tracking-tighter">
+              S9
+            </span>
+            <div>
+              <div class="font-bold text-sm tracking-tight uppercase leading-none">Sector9 QR</div>
+              <div class="font-mono text-[10px] text-neutral-500 tracking-widest uppercase mt-1">Control Console</div>
+            </div>
+          </a>
+          <button
+            type="button"
+            id="close-sidebar-btn"
+            aria-label="Tutup menu navigasi"
+            class="lg:hidden font-mono text-xs px-2 py-1 border border-black hover:bg-black hover:text-white transition-colors cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Section Label -->
+        <div class="px-5 pt-6 pb-2">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+            01 // NAVIGATION
+          </div>
+        </div>
+
+        <!-- Primary Navigation Links -->
+        <nav class="px-3 space-y-1">
+          <a
+            href="/dashboard"
+            class="flex items-center justify-between px-3 py-2.5 bg-white text-black border border-transparent hover:border-black font-mono text-xs uppercase tracking-wider transition-colors"
+          >
+            <span>01. Dashboard</span>
+            <span class="text-neutral-400">/</span>
+          </a>
+          <a
+            href="/manage-qr"
+            class="flex items-center justify-between px-3 py-2.5 bg-white text-black border border-transparent hover:border-black font-mono text-xs uppercase tracking-wider transition-colors"
+          >
+            <span>02. Manage QR</span>
+            <span class="text-neutral-400">/</span>
+          </a>
+          <a
+            href="/user-list"
+            aria-current="page"
+            class="flex items-center justify-between px-3 py-2.5 bg-black text-white border border-black font-mono text-xs uppercase tracking-wider font-medium"
+          >
+            <span>03. User List</span>
+            <span>&rarr;</span>
+          </a>
+        </nav>
+
+        <!-- Data Privacy Security Note -->
+        <div class="px-3 mt-6">
+          <div class="border border-neutral-300 p-3.5 bg-neutral-50">
+            <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-1.5">
+              Private KTP Vault
+            </div>
+            <p class="text-[11px] text-neutral-600 leading-relaxed">
+              Dokumen KTP tersimpan privat di ImageKit dan hanya dimuat melalui proxy terotorisasi sesi admin aktif.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Admin Session Info & Logout -->
+      <div class="border-t border-black p-4 bg-white">
+        <div class="mb-3">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+            Authenticated Admin
+          </div>
+          <div id="sidebar-admin-username" class="font-mono text-xs font-semibold text-black truncate mt-0.5">
+            memuat...
+          </div>
+          <div id="sidebar-admin-login" class="font-mono text-[10px] text-neutral-500 truncate mt-0.5">
+            Login: --
+          </div>
+        </div>
+        <button
+          type="button"
+          id="open-logout-modal-btn"
+          class="w-full py-2 px-3 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider font-medium hover:bg-black hover:text-white transition-colors flex items-center justify-between cursor-pointer"
+        >
+          <span>Sign Out</span>
+          <span>[&rarr;]</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- Top Header Bar -->
+      <header class="h-16 bg-white border-b border-black px-4 sm:px-6 lg:px-8 flex items-center justify-between sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            id="open-sidebar-btn"
+            aria-label="Buka menu navigasi"
+            class="lg:hidden inline-flex items-center justify-center w-9 h-9 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors font-mono text-xs cursor-pointer"
+          >
+            ☰
+          </button>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[11px] uppercase tracking-widest text-neutral-500 hidden sm:inline">
+                INDEX 03 /
+              </span>
+              <h1 class="text-base sm:text-lg font-bold tracking-tight text-black">
+                Verified Visitor Directory
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="hidden md:flex items-center gap-2 px-2.5 py-1 border border-neutral-300 bg-neutral-50 font-mono text-[11px] text-neutral-700">
+            <span class="inline-block w-1.5 h-1.5 bg-black"></span>
+            <span id="wita-clock">--:--:-- WITA</span>
+          </div>
+
+          <button
+            type="button"
+            id="refresh-users-btn"
+            class="h-9 px-3 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white transition-colors inline-flex items-center gap-2 cursor-pointer"
+          >
+            <span id="refresh-icon">↻</span>
+            <span class="hidden sm:inline">Refresh</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content Container -->
+      <main class="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 max-w-7xl w-full mx-auto space-y-6">
+
+        <!-- Search & Multi-Criteria Filter Toolbar -->
+        <section aria-label="Pencarian dan Filter User" class="border border-black bg-white p-4 sm:p-5 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5">
+
+            <!-- Search by Name or WhatsApp (4 cols) -->
+            <div class="lg:col-span-4">
+              <label for="search-input" class="block font-mono text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                Cari Nama / WhatsApp
+              </label>
+              <div class="relative flex items-center">
+                <span class="absolute left-3 font-mono text-xs text-neutral-400 pointer-events-none">Q/</span>
+                <input
+                  type="text"
+                  id="search-input"
+                  placeholder="Nama lengkap atau 628..."
+                  class="w-full h-10 pl-9 pr-8 text-xs sm:text-sm bg-white text-black border border-black rounded-none placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
+                />
+                <button
+                  type="button"
+                  id="clear-search-btn"
+                  aria-label="Hapus pencarian"
+                  class="hidden absolute right-2.5 font-mono text-xs text-neutral-500 hover:text-black cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <!-- Filter by QR Code (3 cols) -->
+            <div class="lg:col-span-3">
+              <label for="filter-qr-select" class="block font-mono text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                Filter QR Code
+              </label>
+              <select
+                id="filter-qr-select"
+                class="w-full h-10 px-3 text-xs sm:text-sm bg-white text-black border border-black rounded-none focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1 cursor-pointer"
+              >
+                <option value="">Semua QR Code</option>
+              </select>
+            </div>
+
+            <!-- Filter Date From WITA (2 cols) -->
+            <div class="lg:col-span-2">
+              <label for="filter-date-from" class="block font-mono text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                Dari Tanggal (WITA)
+              </label>
+              <input
+                type="date"
+                id="filter-date-from"
+                class="w-full h-10 px-2.5 text-xs font-mono bg-white text-black border border-black rounded-none focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
+              />
+            </div>
+
+            <!-- Filter Date To WITA (2 cols) -->
+            <div class="lg:col-span-2">
+              <label for="filter-date-to" class="block font-mono text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                Sampai Tanggal
+              </label>
+              <input
+                type="date"
+                id="filter-date-to"
+                class="w-full h-10 px-2.5 text-xs font-mono bg-white text-black border border-black rounded-none focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
+              />
+            </div>
+
+            <!-- Reset Filter Button (1 col) -->
+            <div class="lg:col-span-1 flex items-end">
+              <button
+                type="button"
+                id="reset-filters-btn"
+                title="Reset semua filter"
+                class="w-full h-10 px-2.5 border border-black bg-neutral-50 text-black font-mono text-[11px] uppercase tracking-wider hover:bg-black hover:text-white transition-colors cursor-pointer"
+              >
+                Reset
+              </button>
+            </div>
+
+          </div>
+
+          <div class="pt-3 border-t border-neutral-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-mono text-[11px] text-neutral-500">
+            <span id="results-summary">Memuat daftar pengguna...</span>
+            <span>TIMEZONE: ASIA/MAKASSAR (WITA)</span>
+          </div>
+        </section>
+
+        <!-- Error State -->
+        <section id="users-error-state" role="alert" class="hidden border border-black bg-neutral-50 p-6 sm:p-8">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="space-y-1.5">
+              <div class="inline-block font-mono text-[11px] uppercase tracking-widest bg-black text-white px-2 py-0.5">
+                LOAD ERROR
+              </div>
+              <h2 class="text-lg font-bold text-black">Gagal Memuat Data User</h2>
+              <p id="users-error-message" class="text-sm text-neutral-600">
+                Terjadi kesalahan saat mengambil data pengunjung dari database.
+              </p>
+            </div>
+            <button
+              type="button"
+              id="retry-users-btn"
+              class="shrink-0 px-5 py-2.5 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              Muat Ulang &rarr;
+            </button>
+          </div>
+        </section>
+
+        <!-- Loading Skeleton State -->
+        <section id="users-loading-skeleton" aria-label="Memuat daftar user" class="border border-neutral-300 bg-white divide-y divide-neutral-200">
+          <div class="p-4 bg-neutral-50 flex justify-between skeleton-box">
+            <div class="h-3.5 w-36 bg-neutral-200"></div>
+            <div class="h-3.5 w-24 bg-neutral-200"></div>
+          </div>
+          <div class="p-4 flex items-center justify-between gap-4 skeleton-box">
+            <div class="space-y-2 flex-1">
+              <div class="h-4 w-48 bg-neutral-200"></div>
+              <div class="h-3 w-32 bg-neutral-100"></div>
+            </div>
+            <div class="h-7 w-28 bg-neutral-200"></div>
+          </div>
+          <div class="p-4 flex items-center justify-between gap-4 skeleton-box">
+            <div class="space-y-2 flex-1">
+              <div class="h-4 w-52 bg-neutral-200"></div>
+              <div class="h-3 w-36 bg-neutral-100"></div>
+            </div>
+            <div class="h-7 w-28 bg-neutral-200"></div>
+          </div>
+          <div class="p-4 flex items-center justify-between gap-4 skeleton-box">
+            <div class="space-y-2 flex-1">
+              <div class="h-4 w-44 bg-neutral-200"></div>
+              <div class="h-3 w-28 bg-neutral-100"></div>
+            </div>
+            <div class="h-7 w-28 bg-neutral-200"></div>
+          </div>
+          <div class="p-4 flex items-center justify-between gap-4 skeleton-box">
+            <div class="space-y-2 flex-1">
+              <div class="h-4 w-56 bg-neutral-200"></div>
+              <div class="h-3 w-32 bg-neutral-100"></div>
+            </div>
+            <div class="h-7 w-28 bg-neutral-200"></div>
+          </div>
+        </section>
+
+        <!-- Empty State -->
+        <section id="users-empty-state" class="hidden border border-black bg-white p-10 sm:p-16 text-center">
+          <div class="inline-block font-mono text-xs uppercase tracking-widest border border-black px-2.5 py-1 mb-3">
+            EMPTY DIRECTORY
+          </div>
+          <h2 id="empty-title" class="text-lg font-bold text-black mb-1.5">
+            Belum Ada Data Identitas User
+          </h2>
+          <p id="empty-desc" class="text-xs sm:text-sm text-neutral-600 max-w-md mx-auto leading-relaxed">
+            Belum ada pengunjung yang menyelesaikan pengisian formulir identitas dan unggah KTP melalui QR Code.
+          </p>
+        </section>
+
+        <!-- Users Data Table -->
+        <section id="users-table-section" class="hidden border border-black bg-white">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[920px]">
+              <thead>
+                <tr class="border-b border-black bg-neutral-50 font-mono text-[11px] uppercase tracking-wider text-neutral-600">
+                  <th class="py-3.5 px-4 font-semibold">Nama Lengkap</th>
+                  <th class="py-3.5 px-4 font-semibold">WhatsApp</th>
+                  <th class="py-3.5 px-4 font-semibold">QR Code</th>
+                  <th class="py-3.5 px-4 font-semibold">Waktu Scan (WITA)</th>
+                  <th class="py-3.5 px-4 font-semibold">Status</th>
+                  <th class="py-3.5 px-4 font-semibold text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody" class="divide-y divide-neutral-200 text-xs">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Pagination Controls -->
+        <nav id="pagination-bar" aria-label="Navigasi halaman daftar user" class="hidden border border-black bg-white px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div id="pagination-info" class="font-mono text-xs text-neutral-600">
+            Halaman 1 dari 1
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="prev-page-btn"
+              class="px-3.5 py-1.5 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white disabled:border-neutral-300 disabled:text-neutral-400 disabled:hover:bg-white disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              &larr; Prev
+            </button>
+            <button
+              type="button"
+              id="next-page-btn"
+              class="px-3.5 py-1.5 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white disabled:border-neutral-300 disabled:text-neutral-400 disabled:hover:bg-white disabled:cursor-not-allowed transition-colors cursor-pointer"
+            >
+              Next &rarr;
+            </button>
+          </div>
+        </nav>
+
+      </main>
+
+      <!-- Footer -->
+      <footer class="border-t border-neutral-200 bg-white px-4 sm:px-6 lg:px-8 py-4">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 font-mono text-[11px] text-neutral-500">
+          <span>SECTOR9 QR // VISITOR IDENTITY &amp; KTP VERIFICATION REGISTRY</span>
+          <span>TIMEZONE: ASIA/MAKASSAR (WITA)</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 1: VIEW USER DETAIL & AUTHORIZED PRIVATE KTP VIEWER              -->
+  <!-- ====================================================================== -->
+  <div
+    id="user-detail-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="user-detail-modal-title"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 overflow-y-auto"
+  >
+    <div class="w-full max-w-3xl bg-white border border-black my-auto max-h-[92vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-black flex items-center justify-between shrink-0 bg-white">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="font-mono text-[10px] bg-black text-white px-2 py-0.5 uppercase shrink-0">DETAIL</span>
+          <h2 id="user-detail-modal-title" class="font-bold text-sm sm:text-base tracking-tight text-black truncate">
+            Detail Identitas User
+          </h2>
+        </div>
+        <button
+          type="button"
+          id="close-detail-modal-btn"
+          aria-label="Tutup modal detail user"
+          class="font-mono text-sm text-neutral-500 hover:text-black px-2 py-0.5 cursor-pointer"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Scrollable Body -->
+      <div id="user-detail-body" class="overflow-y-auto p-5 sm:p-6 space-y-6">
+        <!-- Populated dynamically via JS -->
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-5 py-3.5 border-t border-black bg-neutral-50 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+        <button
+          type="button"
+          id="detail-delete-user-btn"
+          class="px-3.5 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-black hover:text-white transition-colors cursor-pointer"
+        >
+          Hapus User
+        </button>
+
+        <div class="flex items-center gap-2.5">
+          <a
+            id="detail-whatsapp-btn"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="px-4 py-2 border border-black bg-black text-white font-mono text-xs uppercase tracking-wider font-semibold hover:bg-neutral-800 transition-colors inline-flex items-center gap-2"
+          >
+            <span>Hubungi WhatsApp</span>
+            <span>&nearr;</span>
+          </a>
+          <button
+            type="button"
+            id="close-detail-footer-btn"
+            class="px-4 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-neutral-100 transition-colors cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 2: DELETE USER CONFIRMATION DIALOG                               -->
+  <!-- ====================================================================== -->
+  <div
+    id="delete-user-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="delete-user-modal-title"
+    class="hidden fixed inset-0 z-[55] flex items-center justify-center p-4 bg-black/60"
+  >
+    <div class="w-full max-w-md bg-white border border-black">
+      <div class="px-5 py-4 border-b border-black flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[10px] bg-black text-white px-1.5 py-0.5 uppercase">DANGER</span>
+          <h3 id="delete-user-modal-title" class="font-bold text-sm tracking-tight text-black">
+            Hapus Data User Permanen
+          </h3>
+        </div>
+        <button
+          type="button"
+          id="close-delete-user-modal-btn"
+          aria-label="Tutup konfirmasi hapus user"
+          class="font-mono text-xs text-neutral-500 hover:text-black px-1.5 py-0.5 cursor-pointer"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="p-5 space-y-3 text-sm text-neutral-700 leading-relaxed">
+        <p>
+          Apakah Anda yakin ingin menghapus data pengunjung <strong id="delete-user-name" class="text-black"></strong>?
+        </p>
+        <p class="text-xs text-neutral-600 border-l-2 border-black pl-3">
+          Data identitas user akan dihapus dari database Neon PostgreSQL dan dokumen foto KTP privat yang tersimpan di ImageKit juga akan dihapus secara permanen agar tidak ada data pribadi yang tertinggal.
+        </p>
+      </div>
+
+      <div class="px-5 py-3.5 border-t border-neutral-200 bg-neutral-50 flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          id="cancel-delete-user-btn"
+          class="px-4 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-neutral-100 transition-colors cursor-pointer"
+        >
+          Batal
+        </button>
+        <button
+          type="button"
+          id="confirm-delete-user-btn"
+          class="px-4 py-2 border border-black bg-black text-white font-mono text-xs uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-50 transition-colors cursor-pointer"
+        >
+          Ya, Hapus Data
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 3: LOGOUT CONFIRMATION DIALOG                                    -->
+  <!-- ====================================================================== -->
+  <div
+    id="logout-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="logout-modal-title"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+  >
+    <div class="w-full max-w-sm bg-white border border-black">
+      <div class="px-5 py-4 border-b border-black flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-[10px] bg-black text-white px-1.5 py-0.5 uppercase">AUTH</span>
+          <h3 id="logout-modal-title" class="font-semibold text-sm tracking-tight text-black">
+            Konfirmasi Sign Out
+          </h3>
+        </div>
+        <button
+          type="button"
+          id="close-logout-modal-btn"
+          aria-label="Tutup modal logout"
+          class="font-mono text-xs text-neutral-500 hover:text-black px-1.5 py-0.5 cursor-pointer"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="p-5 text-sm text-neutral-700 leading-relaxed">
+        Sesi admin Anda akan dicabut dari server dan cookie autentikasi akan dihapus. Lanjutkan keluar dari sistem?
+      </div>
+
+      <div class="px-5 py-3.5 border-t border-neutral-200 bg-neutral-50 flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          id="cancel-logout-btn"
+          class="px-4 py-2 border border-black bg-white text-black font-mono text-xs uppercase tracking-wider hover:bg-neutral-100 transition-colors cursor-pointer"
+        >
+          Batal
+        </button>
+        <button
+          type="button"
+          id="confirm-logout-btn"
+          class="px-4 py-2 border border-black bg-black text-white font-mono text-xs uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-50 transition-colors cursor-pointer"
+        >
+          Ya, Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ======================================================================
+      // APPLICATION STATE
+      // ======================================================================
+      const state = {
+        csrfToken: '',
+        users: [],
+        qrOptions: [],
+        search: '',
+        qrId: '',
+        dateFrom: '',
+        dateTo: '',
+        page: 1,
+        limit: 15,
+        totalPages: 1,
+        totalRecords: 0,
+        activeDetailUser: null,
+        activeKtpObjectUrl: null,
+        deleteTargetUser: null
+      };
+
+      // ======================================================================
+      // 1. LIVE WITA CLOCK
+      // ======================================================================
+      const clockEl = document.getElementById('wita-clock');
+      function updateWitaClock() {
+        if (!clockEl) return;
+        try {
+          const formatted = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Makassar',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).format(new Date());
+          clockEl.textContent = formatted + ' WITA';
+        } catch {
+          clockEl.textContent = 'ASIA/MAKASSAR';
+        }
+      }
+      updateWitaClock();
+      setInterval(updateWitaClock, 1000);
+
+      // ======================================================================
+      // 2. UTILITIES, WHATSAPP NORMALIZATION & TOAST NOTIFICATIONS
+      // ======================================================================
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function formatNumber(num) {
+        return new Intl.NumberFormat('id-ID').format(Number(num) || 0);
+      }
+
+      function buildWhatsAppUrl(rawPhone) {
+        let digits = String(rawPhone || '').replace(/\D/g, '');
+        if (digits.startsWith('08')) {
+          digits = '62' + digits.slice(1);
+        } else if (digits.startsWith('8')) {
+          digits = '62' + digits;
+        }
+        return `https://wa.me/${digits}`;
+      }
+
+      const toastContainer = document.getElementById('toast-container');
+      function showToast(type, title, message, duration = 4000) {
+        if (!toastContainer) return;
+
+        const variants = {
+          success: { badge: 'OK', border: 'border-black', badgeBg: 'bg-black text-white' },
+          error: { badge: 'ERR', border: 'border-black', badgeBg: 'bg-black text-white' },
+          warning: { badge: 'WARN', border: 'border-black', badgeBg: 'bg-neutral-800 text-white' },
+          info: { badge: 'INFO', border: 'border-neutral-400', badgeBg: 'bg-neutral-200 text-black' }
+        };
+
+        const style = variants[type] || variants.info;
+        const toast = document.createElement('div');
+        toast.className = `toast-enter pointer-events-auto bg-white border ${style.border} p-3.5 flex items-start justify-between gap-3`;
+        toast.setAttribute('role', 'status');
+
+        toast.innerHTML = `
+          <div class="flex items-start gap-2.5 min-w-0">
+            <span class="font-mono text-[10px] font-semibold px-1.5 py-0.5 shrink-0 ${style.badgeBg}">
+              ${escapeHtml(style.badge)}
+            </span>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-black tracking-tight">${escapeHtml(title)}</div>
+              <div class="text-xs text-neutral-600 mt-0.5 break-words leading-snug">${escapeHtml(message)}</div>
+            </div>
+          </div>
+          <button type="button" aria-label="Tutup notifikasi" class="font-mono text-xs text-neutral-400 hover:text-black shrink-0 cursor-pointer">
+            ✕
+          </button>
+        `;
+
+        const removeToast = () => {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        };
+
+        toast.querySelector('button').addEventListener('click', removeToast);
+        toastContainer.appendChild(toast);
+
+        if (duration > 0) {
+          setTimeout(removeToast, duration);
+        }
+      }
+
+      // ======================================================================
+      // 3. SIDEBAR & MODAL CONTROLLERS
+      // ======================================================================
+      const sidebar = document.getElementById('sidebar');
+      const mobileBackdrop = document.getElementById('mobile-backdrop');
+
+      function openMobileSidebar() {
+        sidebar.classList.remove('-translate-x-full');
+        mobileBackdrop.classList.remove('hidden');
+      }
+      function closeMobileSidebar() {
+        sidebar.classList.add('-translate-x-full');
+        mobileBackdrop.classList.add('hidden');
+      }
+
+      document.getElementById('open-sidebar-btn').addEventListener('click', openMobileSidebar);
+      document.getElementById('close-sidebar-btn').addEventListener('click', closeMobileSidebar);
+      mobileBackdrop.addEventListener('click', closeMobileSidebar);
+
+      const userDetailModal = document.getElementById('user-detail-modal');
+      const deleteUserModal = document.getElementById('delete-user-modal');
+      const logoutModal = document.getElementById('logout-modal');
+
+      function revokeKtpBlobUrl() {
+        if (state.activeKtpObjectUrl) {
+          URL.revokeObjectURL(state.activeKtpObjectUrl);
+          state.activeKtpObjectUrl = null;
+        }
+      }
+
+      function closeDetailModal() {
+        userDetailModal.classList.add('hidden');
+        state.activeDetailUser = null;
+        revokeKtpBlobUrl();
+      }
+
+      function closeDeleteModal() {
+        deleteUserModal.classList.add('hidden');
+        state.deleteTargetUser = null;
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (!deleteUserModal.classList.contains('hidden')) {
+            closeDeleteModal();
+          } else if (!userDetailModal.classList.contains('hidden')) {
+            closeDetailModal();
+          } else if (!logoutModal.classList.contains('hidden')) {
+            logoutModal.classList.add('hidden');
+          }
+          closeMobileSidebar();
+        }
+      });
+
+      // Logout Flow
+      document.getElementById('open-logout-modal-btn').addEventListener('click', () => {
+        closeMobileSidebar();
+        logoutModal.classList.remove('hidden');
+      });
+      document.getElementById('close-logout-modal-btn').addEventListener('click', () => logoutModal.classList.add('hidden'));
+      document.getElementById('cancel-logout-btn').addEventListener('click', () => logoutModal.classList.add('hidden'));
+      logoutModal.addEventListener('click', (e) => {
+        if (e.target === logoutModal) logoutModal.classList.add('hidden');
+      });
+
+      document.getElementById('confirm-logout-btn').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Memproses...';
+        try {
+          const res = await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': state.csrfToken
+            }
+          });
+          const data = await res.json().catch(() => ({}));
+          window.location.replace(data.redirect || '/');
+        } catch {
+          window.location.replace('/');
+        }
+      });
+
+      // ======================================================================
+      // 4. STATUS BADGE RENDERER
+      // ======================================================================
+      function renderUserStatusBadge(status) {
+        const val = String(status || 'submitted').toLowerCase();
+        if (val === 'verified') {
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-black text-white border border-black font-mono text-[10px] uppercase tracking-wider font-semibold">
+              <span class="w-1.5 h-1.5 bg-white inline-block"></span>
+              Verified
+            </span>
+          `;
+        }
+        if (val === 'rejected') {
+          return `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-neutral-600 border border-dashed border-neutral-500 font-mono text-[10px] uppercase tracking-wider">
+              Rejected
+            </span>
+          `;
+        }
+        return `
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-100 text-black border border-black font-mono text-[10px] uppercase tracking-wider font-semibold">
+            Submitted
+          </span>
+        `;
+      }
+
+      // ======================================================================
+      // 5. VIEW USER DETAIL MODAL & AUTHORIZED KTP LOADER
+      // ======================================================================
+      async function openUserDetailModal(userId) {
+        revokeKtpBlobUrl();
+        const detailBody = document.getElementById('user-detail-body');
+        const detailTitle = document.getElementById('user-detail-modal-title');
+        const detailWaBtn = document.getElementById('detail-whatsapp-btn');
+        const detailDeleteBtn = document.getElementById('detail-delete-user-btn');
+
+        detailTitle.textContent = 'Memuat Detail User...';
+        detailWaBtn.href = '#';
+        detailBody.innerHTML = `
+          <div class="py-12 text-center font-mono text-xs text-neutral-500">
+            MEMVERIFIKASI OTORISASI &amp; MENGAMBIL DATA IDENTITAS...
+          </div>
+        `;
+        userDetailModal.classList.remove('hidden');
+
+        try {
+          const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (res.status === 401) {
+            window.location.replace('/');
+            return;
+          }
+
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || !payload.success) {
+            throw new Error(payload.message || 'Gagal memuat detail user.');
+          }
+
+          const u = payload.data;
+          state.activeDetailUser = u;
+          const waUrl = u.wa_url || buildWhatsAppUrl(u.whatsapp_number);
+
+          detailTitle.textContent = u.full_name;
+          detailWaBtn.href = waUrl;
+          detailDeleteBtn.onclick = () => openDeleteUserModal(u);
+
+          detailBody.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+              <!-- Left: Identity Metadata (6 cols) -->
+              <div class="md:col-span-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-black pb-2.5">
+                  <span class="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                    IDENTITAS PENGUNJUNG
+                  </span>
+                  ${renderUserStatusBadge(u.status)}
+                </div>
+
+                <dl class="divide-y divide-neutral-200 border-b border-neutral-200 text-xs">
+                  <div class="py-2.5">
+                    <dt class="font-mono text-[10px] uppercase text-neutral-400">Nama Lengkap</dt>
+                    <dd class="font-semibold text-sm text-black mt-0.5 break-words">${escapeHtml(u.full_name)}</dd>
+                  </div>
+                  <div class="py-2.5">
+                    <dt class="font-mono text-[10px] uppercase text-neutral-400">Nomor WhatsApp</dt>
+                    <dd class="font-mono text-sm text-black font-medium mt-0.5 flex items-center justify-between gap-2">
+                      <span>${escapeHtml(u.whatsapp_number)}</span>
+                      <button
+                        type="button"
+                        id="detail-copy-wa-btn"
+                        class="px-2 py-0.5 border border-black bg-white text-black text-[10px] uppercase tracking-wider hover:bg-black hover:text-white transition-colors cursor-pointer"
+                      >
+                        Copy
+                      </button>
+                    </dd>
+                  </div>
+                  <div class="py-2.5">
+                    <dt class="font-mono text-[10px] uppercase text-neutral-400">QR Code Digunakan</dt>
+                    <dd class="text-black font-medium mt-0.5">
+                      ${escapeHtml(u.qr_name)}
+                      <span class="font-mono text-[11px] text-neutral-500 block">/r/${escapeHtml(u.qr_slug)}</span>
+                    </dd>
+                  </div>
+                  <div class="py-2.5">
+                    <dt class="font-mono text-[10px] uppercase text-neutral-400">Waktu Scan (WITA)</dt>
+                    <dd class="font-mono text-black mt-0.5">${escapeHtml(u.scanned_at_wita || '-')}</dd>
+                  </div>
+                  <div class="py-2.5">
+                    <dt class="font-mono text-[10px] uppercase text-neutral-400">Waktu Submit (WITA)</dt>
+                    <dd class="font-mono text-black mt-0.5">${escapeHtml(u.submitted_at_wita || '-')}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <!-- Right: Authorized Private KTP Image Viewer (6 cols) -->
+              <div class="md:col-span-6 flex flex-col">
+                <div class="flex items-center justify-between border-b border-black pb-2.5 mb-3">
+                  <span class="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                    DOKUMEN FOTO KTP (PRIVAT)
+                  </span>
+                  <span class="font-mono text-[10px] bg-neutral-100 border border-black px-1.5 py-0.5">
+                    AUTH PROXY
+                  </span>
+                </div>
+
+                <div id="ktp-viewer-frame" class="flex-1 min-h-[240px] border border-black bg-neutral-50 p-3 flex flex-col items-center justify-center relative">
+                  <div id="ktp-loading-indicator" class="font-mono text-[11px] text-neutral-500 text-center">
+                    MEMUAT FOTO KTP TERENKRIPSI...
+                  </div>
+                  <img
+                    id="detail-ktp-image"
+                    src=""
+                    alt="Foto KTP ${escapeHtml(u.full_name)}"
+                    class="hidden max-h-72 w-auto max-w-full object-contain border border-neutral-300 bg-white cursor-zoom-in"
+                  />
+                  <div id="ktp-error-indicator" class="hidden text-center p-4 space-y-1.5">
+                    <div class="font-mono text-[10px] bg-black text-white px-2 py-0.5 inline-block">ERROR</div>
+                    <p id="ktp-error-text" class="text-xs text-neutral-700">Gagal memuat gambar KTP.</p>
+                  </div>
+                </div>
+
+                <p class="mt-2 font-mono text-[10px] text-neutral-500 leading-relaxed">
+                  Gambar dimuat melalui sesi terautentikasi dan tidak terekspos sebagai URL publik permanen.
+                </p>
+              </div>
+            </div>
+          `;
+
+          document.getElementById('detail-copy-wa-btn').addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(u.whatsapp_number);
+              showToast('success', 'Disalin', `Nomor ${u.whatsapp_number} disalin.`, 2200);
+            } catch {
+              showToast('warning', 'Gagal Menyalin', 'Salin manual: ' + u.whatsapp_number);
+            }
+          });
+
+          // Fetch private KTP image through authorized backend endpoint
+          await loadAuthorizedKtpImage(u.ktp_image_endpoint || `/api/admin/users/${u.id}/ktp`);
+        } catch (err) {
+          detailBody.innerHTML = `
+            <div class="border border-black p-5 bg-neutral-50 font-mono text-xs text-black">
+              [ERROR] ${escapeHtml(err.message)}
+            </div>
+          `;
+        }
+      }
+
+      async function loadAuthorizedKtpImage(endpoint) {
+        const loadingEl = document.getElementById('ktp-loading-indicator');
+        const imgEl = document.getElementById('detail-ktp-image');
+        const errEl = document.getElementById('ktp-error-indicator');
+        const errTextEl = document.getElementById('ktp-error-text');
+
+        try {
+          const res = await fetch(endpoint, {
+            credentials: 'same-origin'
+          });
+
+          if (res.status === 401) {
+            window.location.replace('/');
+            return;
+          }
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.message || 'Gagal mengunduh dokumen KTP dari server.');
+          }
+
+          const blob = await res.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          state.activeKtpObjectUrl = objectUrl;
+
+          imgEl.src = objectUrl;
+          loadingEl.classList.add('hidden');
+          imgEl.classList.remove('hidden');
+
+          // Toggle zoom view inside container on click
+          let isZoomed = false;
+          imgEl.addEventListener('click', () => {
+            isZoomed = !isZoomed;
+            if (isZoomed) {
+              imgEl.classList.remove('max-h-72', 'cursor-zoom-in');
+              imgEl.classList.add('max-h-none', 'w-full', 'cursor-zoom-out');
+            } else {
+              imgEl.classList.add('max-h-72', 'cursor-zoom-in');
+              imgEl.classList.remove('max-h-none', 'w-full', 'cursor-zoom-out');
+            }
+          });
+        } catch (err) {
+          loadingEl.classList.add('hidden');
+          errTextEl.textContent = err.message || 'Gagal memuat foto KTP.';
+          errEl.classList.remove('hidden');
+        }
+      }
+
+      document.getElementById('close-detail-modal-btn').addEventListener('click', closeDetailModal);
+      document.getElementById('close-detail-footer-btn').addEventListener('click', closeDetailModal);
+      userDetailModal.addEventListener('click', (e) => {
+        if (e.target === userDetailModal) closeDetailModal();
+      });
+
+      // ======================================================================
+      // 6. DELETE USER CONFIRMATION MODAL
+      // ======================================================================
+      function openDeleteUserModal(user) {
+        state.deleteTargetUser = user;
+        document.getElementById('delete-user-name').textContent = `"${user.full_name}" (${user.whatsapp_number})`;
+        deleteUserModal.classList.remove('hidden');
+      }
+
+      document.getElementById('close-delete-user-modal-btn').addEventListener('click', closeDeleteModal);
+      document.getElementById('cancel-delete-user-btn').addEventListener('click', closeDeleteModal);
+      deleteUserModal.addEventListener('click', (e) => {
+        if (e.target === deleteUserModal) closeDeleteModal();
+      });
+
+      document.getElementById('confirm-delete-user-btn').addEventListener('click', async (e) => {
+        const target = state.deleteTargetUser;
+        if (!target) return;
+
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Menghapus...';
+
+        try {
+          const res = await fetch(`/api/admin/users/${encodeURIComponent(target.id)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: {
+              'Accept': 'application/json',
+              'X-CSRF-Token': state.csrfToken
+            }
+          });
+
+          if (res.status === 401) {
+            window.location.replace('/');
+            return;
+          }
+
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || 'Gagal menghapus data user.');
+          }
+
+          closeDeleteModal();
+          if (state.activeDetailUser && state.activeDetailUser.id === target.id) {
+            closeDetailModal();
+          }
+
+          showToast('success', 'Data Dihapus', data.message || 'Data user dan KTP berhasil dihapus.');
+          await fetchUsers();
+        } catch (err) {
+          showToast('error', 'Gagal Menghapus', err.message || 'Terjadi kesalahan saat menghapus data user.');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Ya, Hapus Data';
+        }
+      });
+
+      // ======================================================================
+      // 7. RENDER USERS TABLE
+      // ======================================================================
+      function renderUsersTable(users) {
+        const tbody = document.getElementById('users-tbody');
+        tbody.innerHTML = users.map((u) => {
+          const waUrl = u.wa_url || buildWhatsAppUrl(u.whatsapp_number);
+          return `
+            <tr class="hover:bg-neutral-50/90 transition-colors">
+              <td class="py-3.5 px-4 align-middle">
+                <div class="font-semibold text-black text-xs sm:text-sm">${escapeHtml(u.full_name)}</div>
+                <div class="font-mono text-[10px] text-neutral-400 mt-0.5">
+                  Submit: ${escapeHtml(u.submitted_at_wita || '-')}
+                </div>
+              </td>
+              <td class="py-3.5 px-4 align-middle font-mono text-xs text-black whitespace-nowrap">
+                ${escapeHtml(u.whatsapp_number)}
+              </td>
+              <td class="py-3.5 px-4 align-middle">
+                <div class="font-medium text-black text-xs">${escapeHtml(u.qr_name)}</div>
+                <code class="font-mono text-[10px] text-neutral-500">/r/${escapeHtml(u.qr_slug)}</code>
+              </td>
+              <td class="py-3.5 px-4 align-middle font-mono text-[11px] text-neutral-700 whitespace-nowrap">
+                ${escapeHtml(u.scanned_at_wita || '-')}
+              </td>
+              <td class="py-3.5 px-4 align-middle whitespace-nowrap">
+                ${renderUserStatusBadge(u.status)}
+              </td>
+              <td class="py-3.5 px-4 align-middle text-right whitespace-nowrap">
+                <div class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider">
+                  <button
+                    type="button"
+                    data-action="detail"
+                    data-id="${escapeHtml(u.id)}"
+                    class="px-2.5 py-1.5 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors cursor-pointer"
+                  >
+                    Detail
+                  </button>
+                  <a
+                    href="${escapeHtml(waUrl)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="px-2.5 py-1.5 border border-black bg-black text-white hover:bg-neutral-800 transition-colors inline-flex items-center gap-1"
+                  >
+                    <span>Hubungi WhatsApp</span>
+                    <span>&nearr;</span>
+                  </a>
+                  <button
+                    type="button"
+                    data-action="delete"
+                    data-id="${escapeHtml(u.id)}"
+                    class="px-2.5 py-1.5 border border-neutral-300 bg-white text-neutral-700 hover:border-black hover:text-black transition-colors cursor-pointer"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.querySelectorAll('button[data-action]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const action = btn.getAttribute('data-action');
+            const id = btn.getAttribute('data-id');
+            const user = state.users.find((item) => item.id === id);
+            if (!user) return;
+
+            if (action === 'detail') {
+              await openUserDetailModal(user.id);
+            } else if (action === 'delete') {
+              openDeleteUserModal(user);
+            }
+          });
+        });
+      }
+
+      // ======================================================================
+      // 8. LOAD SESSION, QR FILTER OPTIONS, & USERS LIST
+      // ======================================================================
+      const skeletonEl = document.getElementById('users-loading-skeleton');
+      const errorStateEl = document.getElementById('users-error-state');
+      const errorMsgEl = document.getElementById('users-error-message');
+      const emptyStateEl = document.getElementById('users-empty-state');
+      const tableSectionEl = document.getElementById('users-table-section');
+      const paginationBar = document.getElementById('pagination-bar');
+      const paginationInfo = document.getElementById('pagination-info');
+      const prevPageBtn = document.getElementById('prev-page-btn');
+      const nextPageBtn = document.getElementById('next-page-btn');
+      const resultsSummary = document.getElementById('results-summary');
+      const refreshBtn = document.getElementById('refresh-users-btn');
+      const refreshIcon = document.getElementById('refresh-icon');
+
+      async function loadAdminSession() {
+        const res = await fetch('/api/auth/me', {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' }
+        });
+
+        if (res.status === 401) {
+          window.location.replace('/');
+          return null;
+        }
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Gagal memverifikasi sesi admin.');
+        }
+
+        state.csrfToken = data.csrfToken || '';
+        document.getElementById('sidebar-admin-username').textContent = data.admin?.username || 'admin';
+        document.getElementById('sidebar-admin-login').textContent = data.admin?.last_login_at
+          ? `Login: ${data.admin.last_login_at} WITA`
+          : 'Sesi aktif';
+
+        return data;
+      }
+
+      async function loadQrFilterDropdown() {
+        try {
+          const res = await fetch('/api/admin/qr-codes?limit=100', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+          if (!res.ok) return;
+          const payload = await res.json().catch(() => ({}));
+          if (!payload.success || !Array.isArray(payload.data)) return;
+
+          state.qrOptions = payload.data;
+          const selectEl = document.getElementById('filter-qr-select');
+          const currentVal = selectEl.value;
+
+          selectEl.innerHTML = '<option value="">Semua QR Code</option>' +
+            state.qrOptions.map((q) => (
+              `<option value="${escapeHtml(q.id)}">${escapeHtml(q.name)} (/r/${escapeHtml(q.slug)})</option>`
+            )).join('');
+
+          if (currentVal) {
+            selectEl.value = currentVal;
+          }
+        } catch {
+          // Non-blocking dropdown population
+        }
+      }
+
+      async function fetchUsers(isManualRefresh = false) {
+        if (isManualRefresh) {
+          refreshBtn.disabled = true;
+          refreshIcon.classList.add('animate-spin');
+        } else {
+          skeletonEl.classList.remove('hidden');
+          errorStateEl.classList.add('hidden');
+          emptyStateEl.classList.add('hidden');
+          tableSectionEl.classList.add('hidden');
+          paginationBar.classList.add('hidden');
+        }
+
+        try {
+          if (!state.csrfToken) {
+            const session = await loadAdminSession();
+            if (!session) return;
+            await loadQrFilterDropdown();
+          }
+
+          const params = new URLSearchParams({
+            page: String(state.page),
+            limit: String(state.limit)
+          });
+
+          if (state.search) params.set('search', state.search);
+          if (state.qrId) params.set('qr_id', state.qrId);
+          if (state.dateFrom) params.set('date_from', state.dateFrom);
+          if (state.dateTo) params.set('date_to', state.dateTo);
+
+          const res = await fetch(`/api/admin/users?${params.toString()}`, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (res.status === 401) {
+            window.location.replace('/');
+            return;
+          }
+
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok || !payload.success) {
+            throw new Error(payload.message || 'Gagal memuat daftar user.');
+          }
+
+          state.users = payload.data || [];
+          state.page = payload.pagination?.page || 1;
+          state.totalPages = payload.pagination?.totalPages || 1;
+          state.totalRecords = payload.pagination?.total || 0;
+
+          skeletonEl.classList.add('hidden');
+          errorStateEl.classList.add('hidden');
+          resultsSummary.textContent = `Menampilkan ${state.users.length} dari ${formatNumber(state.totalRecords)} user terverifikasi`;
+
+          if (state.users.length === 0) {
+            const hasActiveFilter = Boolean(state.search || state.qrId || state.dateFrom || state.dateTo);
+            document.getElementById('empty-title').textContent = hasActiveFilter
+              ? 'Tidak Ada User yang Cocok'
+              : 'Belum Ada Data Identitas User';
+            document.getElementById('empty-desc').textContent = hasActiveFilter
+              ? 'Tidak ditemukan data user sesuai kata kunci atau rentang filter yang dipilih.'
+              : 'Belum ada pengunjung yang menyelesaikan pengisian formulir identitas dan unggah KTP melalui QR Code.';
+            tableSectionEl.classList.add('hidden');
+            paginationBar.classList.add('hidden');
+            emptyStateEl.classList.remove('hidden');
+          } else {
+            emptyStateEl.classList.add('hidden');
+            tableSectionEl.classList.remove('hidden');
+            renderUsersTable(state.users);
+
+            if (state.totalPages > 1) {
+              paginationBar.classList.remove('hidden');
+              paginationInfo.textContent = `Halaman ${state.page} dari ${state.totalPages} (${formatNumber(state.totalRecords)} total)`;
+              prevPageBtn.disabled = state.page <= 1;
+              nextPageBtn.disabled = state.page >= state.totalPages;
+            } else {
+              paginationBar.classList.add('hidden');
+            }
+          }
+
+          if (isManualRefresh) {
+            showToast('success', 'Data Diperbarui', 'Daftar user terbaru berhasil dimuat.', 2200);
+          }
+        } catch (err) {
+          skeletonEl.classList.add('hidden');
+          tableSectionEl.classList.add('hidden');
+          emptyStateEl.classList.add('hidden');
+          errorMsgEl.textContent = err.message || 'Terjadi kesalahan saat menghubungi server.';
+          errorStateEl.classList.remove('hidden');
+        } finally {
+          refreshBtn.disabled = false;
+          refreshIcon.classList.remove('animate-spin');
+        }
+      }
+
+      // ======================================================================
+      // 9. FILTER, SEARCH & PAGINATION EVENT LISTENERS
+      // ======================================================================
+      const searchInput = document.getElementById('search-input');
+      const clearSearchBtn = document.getElementById('clear-search-btn');
+      const filterQrSelect = document.getElementById('filter-qr-select');
+      const filterDateFrom = document.getElementById('filter-date-from');
+      const filterDateTo = document.getElementById('filter-date-to');
+      let searchTimer = null;
+
+      searchInput.addEventListener('input', () => {
+        const val = searchInput.value.trim();
+        clearSearchBtn.classList.toggle('hidden', val.length === 0);
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          state.search = val;
+          state.page = 1;
+          fetchUsers(false);
+        }, 300);
+      });
+
+      clearSearchBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        clearSearchBtn.classList.add('hidden');
+        state.search = '';
+        state.page = 1;
+        fetchUsers(false);
+      });
+
+      filterQrSelect.addEventListener('change', () => {
+        state.qrId = filterQrSelect.value;
+        state.page = 1;
+        fetchUsers(false);
+      });
+
+      filterDateFrom.addEventListener('change', () => {
+        state.dateFrom = filterDateFrom.value;
+        state.page = 1;
+        fetchUsers(false);
+      });
+
+      filterDateTo.addEventListener('change', () => {
+        state.dateTo = filterDateTo.value;
+        state.page = 1;
+        fetchUsers(false);
+      });
+
+      document.getElementById('reset-filters-btn').addEventListener('click', () => {
+        searchInput.value = '';
+        clearSearchBtn.classList.add('hidden');
+        filterQrSelect.value = '';
+        filterDateFrom.value = '';
+        filterDateTo.value = '';
+
+        state.search = '';
+        state.qrId = '';
+        state.dateFrom = '';
+        state.dateTo = '';
+        state.page = 1;
+        fetchUsers(false);
+      });
+
+      prevPageBtn.addEventListener('click', () => {
+        if (state.page > 1) {
+          state.page -= 1;
+          fetchUsers(false);
+        }
+      });
+
+      nextPageBtn.addEventListener('click', () => {
+        if (state.page < state.totalPages) {
+          state.page += 1;
+          fetchUsers(false);
+        }
+      });
+
+      refreshBtn.addEventListener('click', () => fetchUsers(true));
+      document.getElementById('retry-users-btn').addEventListener('click', () => fetchUsers(false));
+
+      window.addEventListener('DOMContentLoaded', () => {
+        fetchUsers(false);
+      });
+    })();
+  </script>
+</body>
+</html>

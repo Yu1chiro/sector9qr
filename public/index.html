@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Sign In — Sector9 QR Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      background-color: #ffffff;
+      color: #000000;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .editorial-grid-bg {
+      background-image: radial-gradient(#d4d4d4 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    @keyframes toastSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .toast-enter {
+      animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between editorial-grid-bg text-black selection:bg-black selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" aria-live="polite" class="fixed top-4 right-4 z-50 flex flex-col gap-2.5 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"></div>
+
+  <!-- Top Minimalist Header -->
+  <header class="w-full bg-white border-b border-black">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="inline-flex items-center justify-center w-7 h-7 bg-black text-white font-mono text-xs font-semibold tracking-tighter">
+          S9
+        </span>
+        <div>
+          <span class="font-bold text-sm tracking-tight uppercase">Sector9 QR</span>
+          <span class="hidden sm:inline font-mono text-[10px] text-neutral-500 uppercase tracking-widest ml-2">
+            // Control Console
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Centered Login Card -->
+  <main class="flex-1 flex items-center justify-center px-4 py-8 sm:px-6">
+    <div class="w-full max-w-md bg-white border border-black">
+      <!-- Top Editorial Bar -->
+      <div class="bg-black text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
+        <span>Welcome Admin</span>
+      </div>
+
+      <div class="p-6 sm:p-8">
+        <!-- Title & Description -->
+        <div class="pb-5 mb-6 border-b border-neutral-200">
+          <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+            RESTRICTED ACCESS
+          </div>
+          <h1 class="text-2xl font-bold tracking-tight text-black mt-1">
+            Sign In
+          </h1>
+          <p class="text-xs sm:text-sm text-neutral-600 mt-1.5 leading-relaxed">
+            Sector9 admin only
+          </p>
+        </div>
+
+        <!-- Inline Error Alert Banner -->
+        <div id="login-error-banner" role="alert" class="hidden mb-5 border border-black bg-neutral-100 p-3.5 flex items-start justify-between gap-2.5">
+          <div class="flex items-start gap-2.5">
+            <span class="font-mono text-[10px] font-bold bg-black text-white px-1.5 py-0.5 mt-0.5 shrink-0">ERR</span>
+            <span id="login-error-text" class="text-xs font-medium text-black leading-snug"></span>
+          </div>
+          <button type="button" id="dismiss-error-btn" aria-label="Tutup pesan error" class="font-mono text-xs text-neutral-500 hover:text-black cursor-pointer">
+            ✕
+          </button>
+        </div>
+
+        <!-- Sign In Form -->
+        <form id="login-form" novalidate class="space-y-5">
+          <!-- Username -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="username" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
+                Username *
+              </label>
+            </div>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              autocomplete="username"
+              maxlength="50"
+              placeholder="username"
+              required
+              class="w-full h-11 px-3.5 text-sm bg-white text-black border border-black rounded-none placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
+            />
+            <p id="err-username" class="hidden mt-1 font-mono text-[11px] text-black"></p>
+          </div>
+
+          <!-- Password -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="password" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
+                Password *
+              </label>
+            </div>
+            <div class="relative flex items-stretch">
+              <input
+                type="password"
+                id="password"
+                name="password"
+                autocomplete="current-password"
+                maxlength="128"
+                placeholder="••••••••••••"
+                required
+                class="w-full h-11 pl-3.5 pr-20 text-sm bg-white text-black border border-black rounded-none placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
+              />
+              <button
+                type="button"
+                id="toggle-password-btn"
+                class="absolute right-0 top-0 bottom-0 px-3.5 font-mono text-[11px] uppercase tracking-wider text-neutral-600 hover:text-black border-l border-neutral-300 bg-neutral-50 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Show
+              </button>
+            </div>
+            <p id="err-password" class="hidden mt-1 font-mono text-[11px] text-black"></p>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-1">
+            <button
+              type="submit"
+              id="login-submit-btn"
+              class="w-full h-12 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest font-semibold hover:bg-neutral-800 disabled:bg-neutral-300 disabled:border-neutral-300 disabled:text-neutral-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+            >
+              <span id="login-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+              <span id="login-btn-label">Sign In</span>
+              <span id="login-btn-arrow" aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <!-- Minimalist Footer -->
+  <footer class="w-full bg-white border-t border-neutral-200">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 font-mono text-[10px] text-neutral-500">
+      <span>SECTOR9 QR // QR ACCESS &amp; IDENTITY VERIFICATION SYSTEM</span>
+      <span>AUTHORIZED PERSONNEL ONLY</span>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ======================================================================
+      // 2. TOAST NOTIFICATIONS
+      // ======================================================================
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      const toastContainer = document.getElementById('toast-container');
+      function showToast(type, title, message, duration = 4000) {
+        if (!toastContainer) return;
+
+        const variants = {
+          success: { badge: 'OK', border: 'border-black', badgeBg: 'bg-black text-white' },
+          error: { badge: 'ERR', border: 'border-black', badgeBg: 'bg-black text-white' },
+          warning: { badge: 'WARN', border: 'border-black', badgeBg: 'bg-neutral-800 text-white' },
+          info: { badge: 'INFO', border: 'border-neutral-400', badgeBg: 'bg-neutral-200 text-black' }
+        };
+
+        const style = variants[type] || variants.info;
+        const toast = document.createElement('div');
+        toast.className = `toast-enter pointer-events-auto bg-white border ${style.border} p-3.5 flex items-start justify-between gap-3`;
+        toast.setAttribute('role', 'status');
+
+        toast.innerHTML = `
+          <div class="flex items-start gap-2.5 min-w-0">
+            <span class="font-mono text-[10px] font-semibold px-1.5 py-0.5 shrink-0 ${style.badgeBg}">
+              ${escapeHtml(style.badge)}
+            </span>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-black tracking-tight">${escapeHtml(title)}</div>
+              <div class="text-xs text-neutral-600 mt-0.5 break-words leading-snug">${escapeHtml(message)}</div>
+            </div>
+          </div>
+          <button type="button" aria-label="Tutup notifikasi" class="font-mono text-xs text-neutral-400 hover:text-black shrink-0 cursor-pointer">
+            ✕
+          </button>
+        `;
+
+        const removeToast = () => {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        };
+
+        toast.querySelector('button').addEventListener('click', removeToast);
+        toastContainer.appendChild(toast);
+
+        if (duration > 0) {
+          setTimeout(removeToast, duration);
+        }
+      }
+
+      // ======================================================================
+      // 3. CHECK EXISTING ADMIN SESSION ON LOAD
+      // ======================================================================
+      async function checkExistingSession() {
+        try {
+          const res = await fetch('/api/auth/me', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+          });
+          if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (data.success) {
+              window.location.replace('/dashboard');
+            }
+          }
+        } catch {
+          // Stay on login page
+        }
+      }
+
+      // ======================================================================
+      // 4. LOGIN FORM HANDLER
+      // ======================================================================
+      const loginForm = document.getElementById('login-form');
+      const usernameInput = document.getElementById('username');
+      const passwordInput = document.getElementById('password');
+      const togglePasswordBtn = document.getElementById('toggle-password-btn');
+
+      const errUsernameEl = document.getElementById('err-username');
+      const errPasswordEl = document.getElementById('err-password');
+      const loginErrorBanner = document.getElementById('login-error-banner');
+      const loginErrorText = document.getElementById('login-error-text');
+
+      const submitBtn = document.getElementById('login-submit-btn');
+      const spinnerEl = document.getElementById('login-spinner');
+      const btnLabelEl = document.getElementById('login-btn-label');
+      const btnArrowEl = document.getElementById('login-btn-arrow');
+
+      document.getElementById('dismiss-error-btn').addEventListener('click', () => {
+        loginErrorBanner.classList.add('hidden');
+      });
+
+      togglePasswordBtn.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        togglePasswordBtn.textContent = isPassword ? 'Hide' : 'Show';
+        passwordInput.focus();
+      });
+
+      usernameInput.addEventListener('input', () => {
+        errUsernameEl.classList.add('hidden');
+        loginErrorBanner.classList.add('hidden');
+      });
+
+      passwordInput.addEventListener('input', () => {
+        errPasswordEl.classList.add('hidden');
+        loginErrorBanner.classList.add('hidden');
+      });
+
+      function setSubmitting(isSubmitting) {
+        submitBtn.disabled = isSubmitting;
+        usernameInput.disabled = isSubmitting;
+        passwordInput.disabled = isSubmitting;
+
+        if (isSubmitting) {
+          spinnerEl.classList.remove('hidden');
+          btnArrowEl.classList.add('hidden');
+          btnLabelEl.textContent = 'Authenticating...';
+        } else {
+          spinnerEl.classList.add('hidden');
+          btnArrowEl.classList.remove('hidden');
+          btnLabelEl.textContent = 'Sign In';
+        }
+      }
+
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        errUsernameEl.classList.add('hidden');
+        errPasswordEl.classList.add('hidden');
+        loginErrorBanner.classList.add('hidden');
+
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        let isValid = true;
+
+        if (!username) {
+          errUsernameEl.textContent = '> Username wajib diisi.';
+          errUsernameEl.classList.remove('hidden');
+          isValid = false;
+        }
+
+        if (!password) {
+          errPasswordEl.textContent = '> Password wajib diisi.';
+          errPasswordEl.classList.remove('hidden');
+          isValid = false;
+        }
+
+        if (!isValid) {
+          if (!username) usernameInput.focus();
+          else passwordInput.focus();
+          return;
+        }
+
+        setSubmitting(true);
+
+        try {
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+          });
+
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok || !data.success) {
+            const errMsg = data.message || 'Username atau password tidak valid.';
+            loginErrorText.textContent = errMsg;
+            loginErrorBanner.classList.remove('hidden');
+            showToast('error', 'Autentikasi Gagal', errMsg);
+            setSubmitting(false);
+            passwordInput.value = '';
+            passwordInput.focus();
+            return;
+          }
+
+          showToast('success', 'Berhasil Masuk', 'Mengalihkan ke Dashboard...', 2000);
+          window.location.replace(data.redirect || '/dashboard');
+        } catch {
+          const netMsg = 'Tidak dapat terhubung ke server. Pastikan server berjalan.';
+          loginErrorText.textContent = netMsg;
+          loginErrorBanner.classList.remove('hidden');
+          showToast('error', 'Koneksi Gagal', netMsg);
+          setSubmitting(false);
+        }
+      });
+
+      window.addEventListener('DOMContentLoaded', () => {
+        checkExistingSession();
+        usernameInput.focus();
+      });
+    })();
+  </script>
+</body>
+</html>
