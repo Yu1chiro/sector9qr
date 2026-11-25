@@ -35,7 +35,6 @@ const SERVER_PORT = parseInt(process.env.PORT, 10) || 3000;
 
 const CONFIG = {
   PORT: SERVER_PORT,
-  LOCAL_ORIGIN: (process.env.APP_ORIGIN || `http://localhost:${SERVER_PORT}`).replace(/\/+$/, ''),
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_PROD: process.env.NODE_ENV === 'production',
   DATABASE_URL: process.env.DATABASE_URL,
@@ -185,8 +184,39 @@ if (process.argv.includes('--create-admin')) {
 }
 
 // ============================================================================
-// 4. HELPER UTILITIES (TIMEZONE WITA, VALIDATION, VISITOR FINGERPRINT, PASS QR)
+// 4. HELPER UTILITIES (DYNAMIC DOMAIN ORIGIN, TIMEZONE WITA, FINGERPRINT, PASS)
 // ============================================================================
+/**
+ * Mendeteksi origin (protokol + domain) secara otomatis dari HTTP request aktif,
+ * baik saat dijalankan di localhost maupun di balik reverse proxy / platform hosting.
+ */
+function getRequestOrigin(req) {
+  if (!req) return '';
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  let proto = typeof forwardedProto === 'string' && forwardedProto.trim()
+    ? forwardedProto.split(',')[0].trim().toLowerCase()
+    : (req.protocol || 'http');
+
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const host = (
+    typeof forwardedHost === 'string' && forwardedHost.trim()
+      ? forwardedHost.split(',')[0].trim()
+      : (req.get('host') || '')
+  ).trim();
+
+  if (!host) return '';
+
+  if (proto !== 'https' && !/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host)) {
+    const cfVisitor = req.headers['cf-visitor'];
+    if (typeof cfVisitor === 'string' && cfVisitor.includes('"https"')) {
+      proto = 'https';
+    }
+  }
+
+  return `${proto}://${host}`.replace(/\/+$/, '');
+}
+
 function formatWita(dateInput) {
   if (!dateInput) return null;
   const date = new Date(dateInput);
@@ -288,12 +318,13 @@ async function generateUniquePassCredentials() {
   return { passCode, passToken };
 }
 
-function buildPassQrUrl(passToken) {
-  return `${CONFIG.LOCAL_ORIGIN}/admin-scan?token=${encodeURIComponent(passToken)}`;
+function buildPassQrUrl(passToken, origin) {
+  const base = (origin || '').replace(/\/+$/, '');
+  return `${base}/admin-scan?token=${encodeURIComponent(passToken)}`;
 }
 
-async function renderPassQrDataUrl(passToken) {
-  const payload = buildPassQrUrl(passToken);
+async function renderPassQrDataUrl(passToken, origin) {
+  const payload = buildPassQrUrl(passToken, origin);
   return QRCode.toDataURL(payload, {
     errorCorrectionLevel: 'H',
     margin: 3,
@@ -313,7 +344,7 @@ function extractPassLookupIdentifier(rawInput) {
 
   if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
     try {
-      const parsed = new URL(trimmed, CONFIG.LOCAL_ORIGIN);
+      const parsed = new URL(trimmed, 'http://placeholder.local');
       const tokenParam = parsed.searchParams.get('token') || parsed.searchParams.get('code');
       if (tokenParam) {
         candidate = tokenParam.trim();
@@ -387,12 +418,13 @@ function computeQrStatus(qrRow) {
   return 'Active';
 }
 
-function enrichQrMetrics(row) {
+function enrichQrMetrics(row, origin) {
   const maxAccess = parseInt(row.max_access, 10) || 0;
   const submittedUsers = parseInt(row.submitted_users, 10) || 0;
   const uniqueVisitors = parseInt(row.unique_visitors ?? row.unique_access, 10) || 0;
   const remainingAccess = Math.max(0, maxAccess - submittedUsers);
   const totalScans = parseInt(row.total_scans, 10) || 0;
+  const baseOrigin = (origin || '').replace(/\/+$/, '');
 
   const status = computeQrStatus({
     is_disabled: row.is_disabled,
@@ -404,7 +436,6 @@ function enrichQrMetrics(row) {
   return {
     ...row,
     max_access: maxAccess,
-    // unique_access merepresentasikan kuota terpakai (user yang telah submit form)
     unique_access: submittedUsers,
     used_access: submittedUsers,
     submitted_users: submittedUsers,
@@ -412,7 +443,7 @@ function enrichQrMetrics(row) {
     remaining_access: remainingAccess,
     total_scans: totalScans,
     status,
-    qr_url: `${CONFIG.LOCAL_ORIGIN}/r/${row.slug}`,
+    qr_url: `${baseOrigin}/r/${row.slug}`,
     expires_at_wita: formatWita(row.expires_at),
     created_at_wita: formatWita(row.created_at)
   };
@@ -922,7 +953,7 @@ authRouter.get('/me', requireAdminApi, (req, res) => {
     },
     csrfToken: req.admin.csrf_token,
     config: {
-      localOrigin: CONFIG.LOCAL_ORIGIN,
+      localOrigin: getRequestOrigin(req),
       timezone: CONFIG.TIMEZONE,
       uploadMaxSizeMb: CONFIG.UPLOAD_MAX_SIZE_MB
     }
@@ -940,6 +971,7 @@ adminRouter.use(requireAdminApi);
 // 10A. Dashboard Analytics
 adminRouter.get('/dashboard', async (req, res, next) => {
   try {
+    const origin = getRequestOrigin(req);
     const qrStatsQuery = await pool.query(`
       SELECT
         q.id,
@@ -974,7 +1006,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
       ORDER BY q.created_at DESC
     `);
 
-    const allQrs = qrStatsQuery.rows.map(enrichQrMetrics);
+    const allQrs = qrStatsQuery.rows.map((row) => enrichQrMetrics(row, origin));
 
     let activeQr = 0;
     let expiredQr = 0;
@@ -1083,6 +1115,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
 // 10B. QR Code Management CRUD
 adminRouter.get('/qr-codes', async (req, res, next) => {
   try {
+    const origin = getRequestOrigin(req);
     const search = String(req.query.search || '').trim().toLowerCase();
     const statusFilter = String(req.query.status || 'all').trim().toLowerCase();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -1124,7 +1157,7 @@ adminRouter.get('/qr-codes', async (req, res, next) => {
       ORDER BY q.created_at DESC
     `);
 
-    let items = result.rows.map(enrichQrMetrics);
+    let items = result.rows.map((row) => enrichQrMetrics(row, origin));
 
     if (search) {
       items = items.filter(
@@ -1211,7 +1244,7 @@ adminRouter.get('/qr-codes/:id', async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'QR Code tidak ditemukan.' });
     }
 
-    const enriched = enrichQrMetrics(qrRes.rows[0]);
+    const enriched = enrichQrMetrics(qrRes.rows[0], getRequestOrigin(req));
     const dailyScans = await pool.query(
       `SELECT
         TO_CHAR(first_scanned_at AT TIME ZONE 'Asia/Makassar', 'YYYY-MM-DD') AS day,
@@ -1249,7 +1282,8 @@ adminRouter.get('/qr-codes/:id/image', async (req, res, next) => {
     }
 
     const qr = qrRes.rows[0];
-    const targetUrl = `${CONFIG.LOCAL_ORIGIN}/r/${qr.slug}`;
+    const origin = getRequestOrigin(req);
+    const targetUrl = `${origin}/r/${qr.slug}`;
 
     const pngDataUrl = await QRCode.toDataURL(targetUrl, {
       errorCorrectionLevel: qr.logo_url ? 'H' : 'M',
@@ -1367,12 +1401,15 @@ adminRouter.post('/qr-codes', verifyCsrf, async (req, res, next) => {
       ]
     );
 
-    const created = enrichQrMetrics({
-      ...insertRes.rows[0],
-      unique_visitors: 0,
-      total_scans: 0,
-      submitted_users: 0
-    });
+    const created = enrichQrMetrics(
+      {
+        ...insertRes.rows[0],
+        unique_visitors: 0,
+        total_scans: 0,
+        submitted_users: 0
+      },
+      getRequestOrigin(req)
+    );
 
     return res.status(201).json({
       success: true,
@@ -1552,7 +1589,7 @@ adminRouter.put('/qr-codes/:id', verifyCsrf, async (req, res, next) => {
     return res.json({
       success: true,
       message: 'Konfigurasi QR Code berhasil diperbarui.',
-      data: enrichQrMetrics(refreshedRes.rows[0])
+      data: enrichQrMetrics(refreshedRes.rows[0], getRequestOrigin(req))
     });
   } catch (err) {
     if (newlyUploadedLogo?.fileId) {
@@ -1802,7 +1839,8 @@ adminRouter.get('/users/:id/pass-qr', async (req, res, next) => {
     }
 
     const row = userRes.rows[0];
-    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token);
+    const origin = getRequestOrigin(req);
+    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token, origin);
 
     return res.json({
       success: true,
@@ -1815,7 +1853,7 @@ adminRouter.get('/users/:id/pass-qr', async (req, res, next) => {
         whatsapp_number: row.whatsapp_number,
         status: row.status,
         submitted_at_wita: formatWita(row.submitted_at),
-        pass_qr_url: buildPassQrUrl(row.pass_token),
+        pass_qr_url: buildPassQrUrl(row.pass_token, origin),
         pass_qr_data_url: passQrDataUrl
       }
     });
@@ -2089,11 +2127,6 @@ app.use('/api/admin', adminRouter);
 // ============================================================================
 // 11. PUBLIC QR EVALUATION & SUBMIT-BASED QUOTA ENGINE (/r/:slug & /api/public)
 // ============================================================================
-/**
- * Mengevaluasi status QR Code dan mencatat kunjungan scan pada qr_scan_events.
- * PENTING: Kuota max_access dihitung dari jumlah user yang SUDAH SUBMIT FORM (qr_users),
- * bukan dari jumlah kunjungan/scan qr_scan_events.
- */
 async function evaluateQrAndRecordScan(slug, visitor) {
   const qrRes = await pool.query(
     `SELECT
@@ -2119,7 +2152,6 @@ async function evaluateQrAndRecordScan(slug, visitor) {
     return { status: 'expired', qr, scanEvent: null };
   }
 
-  // Hitung jumlah peserta yang SUDAH SUBMIT form pada QR Code ini
   const submittedRes = await pool.query(
     'SELECT COUNT(*)::INT AS submitted_count FROM qr_users WHERE qr_code_id = $1',
     [qr.id]
@@ -2136,7 +2168,6 @@ async function evaluateQrAndRecordScan(slug, visitor) {
     };
   }
 
-  // Catat atau perbarui kunjungan scan untuk analitik dan status PIN visitor
   const scanUpsertRes = await pool.query(
     `INSERT INTO qr_scan_events (
       qr_code_id, visitor_fingerprint, ip_address, user_agent, pin_verified, hit_count
@@ -2186,7 +2217,6 @@ app.get('/r/:slug', async (req, res, next) => {
 
 const publicRouter = express.Router();
 
-// Memproses tampilan halaman scan & mengecek kuota form submit
 publicRouter.post('/scan', async (req, res, next) => {
   try {
     const slug = String(req.body?.slug || '').trim();
@@ -2263,7 +2293,6 @@ publicRouter.post('/scan', async (req, res, next) => {
   }
 });
 
-// Verifikasi PIN QR Code di sisi server
 publicRouter.post('/verify-pin', pinVerifyRateLimiter, async (req, res, next) => {
   try {
     const slug = String(req.body?.slug || '').trim();
@@ -2325,7 +2354,6 @@ publicRouter.post('/verify-pin', pinVerifyRateLimiter, async (req, res, next) =>
   }
 });
 
-// Pengiriman formulir identitas user + pemotongan kuota atomic saat submit + QR Pass
 publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => {
   let uploadedKtp = null;
   const client = await pool.connect();
@@ -2364,7 +2392,6 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
 
     const visitor = resolveVisitorIdentity(req, res);
 
-    // Pengecekan awal sebelum upload ke ImageKit agar tidak membuang kuota upload jika penuh
     const preCheck = await evaluateQrAndRecordScan(slug, visitor);
     if (preCheck.status !== 'valid') {
       return res.status(403).json({
@@ -2394,7 +2421,6 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
 
     const { passCode, passToken } = await generateUniquePassCredentials();
 
-    // Unggah KTP privat ke ImageKit
     uploadedKtp = await uploadToImageKit({
       base64Data: ktpBase64,
       folder: '/sector9-qr/ktp',
@@ -2402,7 +2428,6 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
       isPrivateFile: true
     });
 
-    // Mulai transaksi & kunci baris qr_codes (FOR UPDATE) agar perhitungan max_access atomic
     await client.query('BEGIN');
     inTransaction = true;
 
@@ -2432,7 +2457,6 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
       });
     }
 
-    // Hitung ulang jumlah form submit yang sudah masuk di dalam lock transaksi
     const currentSubmitCountRes = await client.query(
       'SELECT COUNT(*)::INT AS submitted_count FROM qr_users WHERE qr_code_id = $1',
       [lockedQr.id]
@@ -2476,8 +2500,9 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
     inTransaction = false;
 
     const savedUser = userInsert.rows[0];
-    const passQrUrl = buildPassQrUrl(savedUser.pass_token);
-    const passQrDataUrl = await renderPassQrDataUrl(savedUser.pass_token);
+    const origin = getRequestOrigin(req);
+    const passQrUrl = buildPassQrUrl(savedUser.pass_token, origin);
+    const passQrDataUrl = await renderPassQrDataUrl(savedUser.pass_token, origin);
 
     return res.status(201).json({
       success: true,
@@ -2513,7 +2538,6 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
   }
 });
 
-// Mengambil kembali QR Pass user menggunakan pass_token
 publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next) => {
   try {
     const token = String(req.params.token || '').trim().toLowerCase();
@@ -2553,7 +2577,8 @@ publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next)
     }
 
     const row = passRes.rows[0];
-    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token);
+    const origin = getRequestOrigin(req);
+    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token, origin);
 
     return res.json({
       success: true,
@@ -2569,7 +2594,7 @@ publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next)
         destination_url: row.destination_url,
         submitted_at_wita: formatWita(row.submitted_at),
         verified_at_wita: formatWita(row.verified_at),
-        pass_qr_url: buildPassQrUrl(row.pass_token),
+        pass_qr_url: buildPassQrUrl(row.pass_token, origin),
         pass_qr_data_url: passQrDataUrl
       }
     });
@@ -2692,6 +2717,6 @@ app.use((err, req, res, next) => {
 // 14. START HTTP SERVER
 // ============================================================================
 app.listen(CONFIG.PORT, () => {
-  console.log(`[Sector9 QR] Server berjalan pada ${CONFIG.LOCAL_ORIGIN}`);
+  console.log(`[Sector9 QR] Server aktif pada port ${CONFIG.PORT} (Auto-detect domain dari request)`);
   console.log(`[Sector9 QR] Environment: ${CONFIG.NODE_ENV} | Timezone: ${CONFIG.TIMEZONE}`);
 });
