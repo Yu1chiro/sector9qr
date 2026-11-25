@@ -186,10 +186,6 @@ if (process.argv.includes('--create-admin')) {
 // ============================================================================
 // 4. HELPER UTILITIES (DYNAMIC DOMAIN ORIGIN, TIMEZONE WITA, FINGERPRINT, PASS)
 // ============================================================================
-/**
- * Mendeteksi origin (protokol + domain) secara otomatis dari HTTP request aktif,
- * baik saat dijalankan di localhost maupun di balik reverse proxy / platform hosting.
- */
 function getRequestOrigin(req) {
   if (!req) return '';
 
@@ -402,11 +398,6 @@ function resolveVisitorIdentity(req, res) {
   return { vid, fingerprint, ip, ua };
 }
 
-/**
- * STATUS QR CODE:
- * Kuota max_access dihitung berdasarkan jumlah user yang SUDAH SUBMIT FORM (submitted_users),
- * bukan dari jumlah scan/kunjungan halaman.
- */
 function computeQrStatus(qrRow) {
   if (qrRow.is_disabled) return 'Disabled';
   const now = Date.now();
@@ -450,7 +441,7 @@ function enrichQrMetrics(row, origin) {
 }
 
 function signPinCookieValue(slug, fingerprint) {
-  const exp = Math.floor(Date.now() / 1000) + 1800; // berlaku 30 menit
+  const exp = Math.floor(Date.now() / 1000) + 1800;
   const payload = `${slug}.${fingerprint}.${exp}`;
   const sig = crypto.createHmac('sha256', CONFIG.JWT_SECRET).update(payload).digest('hex');
   return `${exp}.${sig}`;
@@ -1727,6 +1718,7 @@ adminRouter.get('/users', async (req, res, next) => {
       whatsapp_number: row.whatsapp_number,
       wa_url: `https://wa.me/${row.whatsapp_number}`,
       status: row.status,
+      is_used: row.status === 'verified' || Boolean(row.verified_at) || (row.check_in_count || 0) >= 1,
       check_in_count: row.check_in_count || 0,
       scanned_at_wita: formatWita(row.scanned_at),
       submitted_at_wita: formatWita(row.submitted_at),
@@ -1800,6 +1792,7 @@ adminRouter.get('/users/:id', async (req, res, next) => {
         whatsapp_number: row.whatsapp_number,
         wa_url: `https://wa.me/${row.whatsapp_number}`,
         status: row.status,
+        is_used: row.status === 'verified' || Boolean(row.verified_at) || (row.check_in_count || 0) >= 1,
         check_in_count: row.check_in_count || 0,
         verified_by: row.verified_by_username || null,
         scanned_at_wita: formatWita(row.scanned_at),
@@ -1823,7 +1816,7 @@ adminRouter.get('/users/:id/pass-qr', async (req, res, next) => {
     const userRes = await pool.query(
       `SELECT
         u.id, u.pass_code, u.pass_token, u.full_name, u.whatsapp_number,
-        u.status, u.submitted_at,
+        u.status, u.submitted_at, u.verified_at, u.check_in_count,
         COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
         q.name AS qr_name
        FROM qr_users u
@@ -1852,7 +1845,9 @@ adminRouter.get('/users/:id/pass-qr', async (req, res, next) => {
         full_name: row.full_name,
         whatsapp_number: row.whatsapp_number,
         status: row.status,
+        is_used: row.status === 'verified' || Boolean(row.verified_at) || (row.check_in_count || 0) >= 1,
         submitted_at_wita: formatWita(row.submitted_at),
+        verified_at_wita: formatWita(row.verified_at),
         pass_qr_url: buildPassQrUrl(row.pass_token, origin),
         pass_qr_data_url: passQrDataUrl
       }
@@ -1934,13 +1929,14 @@ adminRouter.delete('/users/:id', verifyCsrf, async (req, res, next) => {
   }
 });
 
-// 10D. Admin QR Pass Scanner & Verification Profile Card
+// 10D. Admin QR Pass Scanner — Single-Use Validation (Otomatis Hangus Setelah 1x Scan)
 adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
   const client = await pool.connect();
+  let inTransaction = false;
+
   try {
     const parsedLookup = extractPassLookupIdentifier(req.body?.code_or_token);
     if (!parsedLookup) {
-      client.release();
       return res.status(400).json({
         success: false,
         message: 'QR Pass atau Unique ID tidak valid. Pastikan memindai QR Pass peserta yang sah.'
@@ -1957,6 +1953,7 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
     }
 
     await client.query('BEGIN');
+    inTransaction = true;
 
     const userRes = await client.query(
       `SELECT
@@ -1987,6 +1984,7 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
 
     if (userRes.rowCount === 0) {
       await client.query('ROLLBACK');
+      inTransaction = false;
       return res.status(404).json({
         success: false,
         message: 'QR Pass tidak ditemukan dalam sistem. Peserta belum terdaftar atau data telah dihapus.'
@@ -1997,6 +1995,7 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
 
     if (row.status === 'rejected') {
       await client.query('ROLLBACK');
+      inTransaction = false;
       return res.status(403).json({
         success: false,
         status: 'rejected',
@@ -2004,20 +2003,74 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
       });
     }
 
-    const isFirstVerification = row.status !== 'verified' || !row.verified_at;
-    const actionType = isFirstVerification ? 'verified' : 're_scanned';
+    const existingCheckInCount = parseInt(row.check_in_count, 10) || 0;
+    const isAlreadyUsed =
+      row.status === 'verified' ||
+      row.verified_at !== null ||
+      existingCheckInCount >= 1;
+
+    if (isAlreadyUsed) {
+      await client.query(
+        `INSERT INTO qr_pass_verifications (
+          qr_user_id, qr_code_id, admin_id, action_type, scanner_ip, scanner_user_agent
+        )
+        VALUES ($1, $2, $3, 're_scanned', $4, $5)`,
+        [
+          row.id,
+          row.qr_code_id,
+          req.admin.admin_id,
+          getClientIp(req),
+          (req.headers['user-agent'] || '').slice(0, 500)
+        ]
+      );
+
+      await client.query('COMMIT');
+      inTransaction = false;
+
+      const firstVerifiedAtWita = formatWita(row.verified_at || row.last_checked_in_at) || '-';
+      const firstVerifier = row.previous_verified_by || 'admin';
+
+      return res.status(409).json({
+        success: false,
+        status: 'already_used',
+        already_used: true,
+        message: `QR Pass HANGUS! Tiket atas nama ${row.full_name} (${row.pass_code}) sudah pernah dipindai pada ${firstVerifiedAtWita} WITA oleh ${firstVerifier} dan tidak dapat digunakan untuk kedua kalinya.`,
+        used_info: {
+          user_id: row.id,
+          pass_code: row.pass_code,
+          full_name: row.full_name,
+          whatsapp_number: row.whatsapp_number,
+          event_name: row.qr_name,
+          verified_at_wita: firstVerifiedAtWita,
+          verified_by: firstVerifier
+        }
+      });
+    }
 
     const updateRes = await client.query(
       `UPDATE qr_users
        SET status = 'verified',
-           verified_at = COALESCE(verified_at, NOW()),
-           verified_by_admin_id = COALESCE(verified_by_admin_id, $2),
-           check_in_count = COALESCE(check_in_count, 0) + 1,
+           verified_at = NOW(),
+           verified_by_admin_id = $2,
+           check_in_count = 1,
            last_checked_in_at = NOW()
        WHERE id = $1
+         AND status = 'submitted'
+         AND verified_at IS NULL
        RETURNING status, verified_at, check_in_count, last_checked_in_at`,
       [row.id, req.admin.admin_id]
     );
+
+    if (updateRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      return res.status(409).json({
+        success: false,
+        status: 'already_used',
+        already_used: true,
+        message: 'QR Pass HANGUS! Tiket ini baru saja dipindai dan tidak dapat digunakan untuk kedua kalinya.'
+      });
+    }
 
     const updated = updateRes.rows[0];
 
@@ -2025,25 +2078,24 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
       `INSERT INTO qr_pass_verifications (
         qr_user_id, qr_code_id, admin_id, action_type, scanner_ip, scanner_user_agent
       )
-      VALUES ($1, $2, $3, $4, $5, $6)`,
+      VALUES ($1, $2, $3, 'verified', $4, $5)`,
       [
         row.id,
         row.qr_code_id,
         req.admin.admin_id,
-        actionType,
         getClientIp(req),
         (req.headers['user-agent'] || '').slice(0, 500)
       ]
     );
 
     await client.query('COMMIT');
+    inTransaction = false;
 
     return res.json({
       success: true,
-      is_first_verification: isFirstVerification,
-      message: isFirstVerification
-        ? 'QR Pass berhasil diverifikasi.'
-        : `QR Pass valid (scan ke-${updated.check_in_count}).`,
+      is_first_verification: true,
+      single_use_consumed: true,
+      message: 'QR Pass valid & berhasil diverifikasi. Tiket ini sekarang otomatis hangus dan tidak bisa dipindai ulang.',
       profile: {
         user_id: row.id,
         pass_code: row.pass_code,
@@ -2054,19 +2106,19 @@ adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
         whatsapp_number: row.whatsapp_number,
         wa_url: `https://wa.me/${row.whatsapp_number}`,
         status: updated.status,
-        verified_badge: 'VERIFIED',
+        verified_badge: 'VERIFIED (1X USED)',
         check_in_count: updated.check_in_count,
         submitted_at_wita: formatWita(row.submitted_at),
         verified_at_wita: formatWita(updated.verified_at),
         last_checked_in_at_wita: formatWita(updated.last_checked_in_at),
-        verified_by: isFirstVerification
-          ? req.admin.username
-          : (row.previous_verified_by || req.admin.username),
+        verified_by: req.admin.username,
         ktp_image_endpoint: `/api/admin/users/${row.id}/ktp`
       }
     });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
     return next(err);
   } finally {
     client.release();
@@ -2108,6 +2160,7 @@ adminRouter.get('/verifications', async (req, res, next) => {
       event_name: r.event_name,
       visitor_fingerprint: r.visitor_fingerprint || '-',
       action_type: r.action_type,
+      is_blocked_duplicate: r.action_type === 're_scanned',
       check_in_count: r.check_in_count,
       admin_username: r.admin_username || 'admin',
       scanned_at_wita: formatWita(r.scanned_at)
@@ -2191,7 +2244,6 @@ async function evaluateQrAndRecordScan(slug, visitor) {
   };
 }
 
-// Endpoint redirect internal saat QR Code dipindai kamera
 app.get('/r/:slug', async (req, res, next) => {
   try {
     const slug = String(req.params.slug || '').trim();
@@ -2506,7 +2558,7 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
 
     return res.status(201).json({
       success: true,
-      message: 'Data identitas berhasil disimpan. Silakan simpan QR Pass Anda.',
+      message: 'Data identitas berhasil disimpan. Silakan simpan QR Pass Anda (berlaku 1x scan).',
       data: {
         id: savedUser.id,
         pass_code: savedUser.pass_code,
@@ -2516,6 +2568,7 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
         full_name: fullName,
         whatsapp_number: whatsappNumber,
         status: savedUser.status,
+        is_used: false,
         destination_url: lockedQr.destination_url,
         submitted_at_wita: formatWita(savedUser.submitted_at),
         pass_qr_url: passQrUrl,
@@ -2557,6 +2610,7 @@ publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next)
         u.full_name,
         u.whatsapp_number,
         u.status,
+        u.check_in_count,
         u.submitted_at,
         u.verified_at,
         q.name AS qr_name,
@@ -2579,6 +2633,10 @@ publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next)
     const row = passRes.rows[0];
     const origin = getRequestOrigin(req);
     const passQrDataUrl = await renderPassQrDataUrl(row.pass_token, origin);
+    const isUsed =
+      row.status === 'verified' ||
+      Boolean(row.verified_at) ||
+      (parseInt(row.check_in_count, 10) || 0) >= 1;
 
     return res.json({
       success: true,
@@ -2591,6 +2649,7 @@ publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next)
         full_name: row.full_name,
         whatsapp_number: row.whatsapp_number,
         status: row.status,
+        is_used: isUsed,
         destination_url: row.destination_url,
         submitted_at_wita: formatWita(row.submitted_at),
         verified_at_wita: formatWita(row.verified_at),
