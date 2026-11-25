@@ -14,7 +14,7 @@ const cookieParser = require('cookie-parser');
 const QRCode = require('qrcode');
 
 // ============================================================================
-// 1. VALIDASI & KONFIGURASI ENVIRONMENT (FOKUS LOCALHOST:3000)
+// 1. VALIDASI & KONFIGURASI ENVIRONMENT
 // ============================================================================
 const REQUIRED_ENV = [
   'DATABASE_URL',
@@ -35,7 +35,7 @@ const SERVER_PORT = parseInt(process.env.PORT, 10) || 3000;
 
 const CONFIG = {
   PORT: SERVER_PORT,
-  LOCAL_ORIGIN: `http://localhost:${SERVER_PORT}`,
+  LOCAL_ORIGIN: (process.env.APP_ORIGIN || `http://localhost:${SERVER_PORT}`).replace(/\/+$/, ''),
   NODE_ENV: process.env.NODE_ENV || 'development',
   IS_PROD: process.env.NODE_ENV === 'production',
   DATABASE_URL: process.env.DATABASE_URL,
@@ -185,7 +185,7 @@ if (process.argv.includes('--create-admin')) {
 }
 
 // ============================================================================
-// 4. HELPER UTILITIES (TIMEZONE WITA, VALIDATION, VISITOR FINGERPRINT)
+// 4. HELPER UTILITIES (TIMEZONE WITA, VALIDATION, VISITOR FINGERPRINT, PASS QR)
 // ============================================================================
 function formatWita(dateInput) {
   if (!dateInput) return null;
@@ -260,6 +260,84 @@ function generateSlug(length = 8) {
   return slug;
 }
 
+function generatePassCodeCandidate() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.randomBytes(8);
+  let code = 'S9-';
+  for (let i = 0; i < 8; i++) {
+    code += alphabet[bytes[i] % alphabet.length];
+  }
+  return code;
+}
+
+async function generateUniquePassCredentials() {
+  let passCode = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = generatePassCodeCandidate();
+    const dup = await pool.query('SELECT 1 FROM qr_users WHERE pass_code = $1 LIMIT 1', [candidate]);
+    if (dup.rowCount === 0) {
+      passCode = candidate;
+      break;
+    }
+  }
+  if (!passCode) {
+    throw new Error('Gagal menghasilkan Unique Pass ID. Silakan coba lagi.');
+  }
+
+  const passToken = crypto.randomBytes(32).toString('hex');
+  return { passCode, passToken };
+}
+
+function buildPassQrUrl(passToken) {
+  return `${CONFIG.LOCAL_ORIGIN}/admin-scan?token=${encodeURIComponent(passToken)}`;
+}
+
+async function renderPassQrDataUrl(passToken) {
+  const payload = buildPassQrUrl(passToken);
+  return QRCode.toDataURL(payload, {
+    errorCorrectionLevel: 'H',
+    margin: 3,
+    width: 600,
+    color: {
+      dark: '#000000',
+      light: '#FFFFFF'
+    }
+  });
+}
+
+function extractPassLookupIdentifier(rawInput) {
+  const trimmed = String(rawInput || '').trim();
+  if (!trimmed || trimmed.length > 512) return null;
+
+  let candidate = trimmed;
+
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+    try {
+      const parsed = new URL(trimmed, CONFIG.LOCAL_ORIGIN);
+      const tokenParam = parsed.searchParams.get('token') || parsed.searchParams.get('code');
+      if (tokenParam) {
+        candidate = tokenParam.trim();
+      }
+    } catch {
+      // Abaikan jika bukan URL valid, lanjutkan sebagai string biasa
+    }
+  }
+
+  if (/^[a-f0-9]{64}$/i.test(candidate)) {
+    return { type: 'token', value: candidate.toLowerCase() };
+  }
+
+  if (/^S9-[A-Z0-9]{6,16}$/i.test(candidate)) {
+    return { type: 'code', value: candidate.toUpperCase() };
+  }
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)) {
+    return { type: 'uuid', value: candidate.toLowerCase() };
+  }
+
+  return null;
+}
+
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string' && forwarded.length > 0) {
@@ -293,37 +371,46 @@ function resolveVisitorIdentity(req, res) {
   return { vid, fingerprint, ip, ua };
 }
 
+/**
+ * STATUS QR CODE:
+ * Kuota max_access dihitung berdasarkan jumlah user yang SUDAH SUBMIT FORM (submitted_users),
+ * bukan dari jumlah scan/kunjungan halaman.
+ */
 function computeQrStatus(qrRow) {
   if (qrRow.is_disabled) return 'Disabled';
   const now = Date.now();
   const expiresAt = new Date(qrRow.expires_at).getTime();
   if (expiresAt <= now) return 'Expired';
-  const uniqueAccess = parseInt(qrRow.unique_access, 10) || 0;
+  const submittedUsers = parseInt(qrRow.submitted_users, 10) || 0;
   const maxAccess = parseInt(qrRow.max_access, 10) || 0;
-  if (uniqueAccess >= maxAccess) return 'Limit Reached';
+  if (submittedUsers >= maxAccess) return 'Limit Reached';
   return 'Active';
 }
 
 function enrichQrMetrics(row) {
   const maxAccess = parseInt(row.max_access, 10) || 0;
-  const uniqueAccess = parseInt(row.unique_access, 10) || 0;
-  const remainingAccess = Math.max(0, maxAccess - uniqueAccess);
-  const totalScans = parseInt(row.total_scans, 10) || 0;
   const submittedUsers = parseInt(row.submitted_users, 10) || 0;
+  const uniqueVisitors = parseInt(row.unique_visitors ?? row.unique_access, 10) || 0;
+  const remainingAccess = Math.max(0, maxAccess - submittedUsers);
+  const totalScans = parseInt(row.total_scans, 10) || 0;
+
   const status = computeQrStatus({
     is_disabled: row.is_disabled,
     expires_at: row.expires_at,
-    unique_access: uniqueAccess,
+    submitted_users: submittedUsers,
     max_access: maxAccess
   });
 
   return {
     ...row,
     max_access: maxAccess,
-    unique_access: uniqueAccess,
+    // unique_access merepresentasikan kuota terpakai (user yang telah submit form)
+    unique_access: submittedUsers,
+    used_access: submittedUsers,
+    submitted_users: submittedUsers,
+    unique_visitors: uniqueVisitors,
     remaining_access: remainingAccess,
     total_scans: totalScans,
-    submitted_users: submittedUsers,
     status,
     qr_url: `${CONFIG.LOCAL_ORIGIN}/r/${row.slug}`,
     expires_at_wita: formatWita(row.expires_at),
@@ -502,7 +589,6 @@ function generateSignedImageKitUrl(fileUrl, expireSeconds = 60) {
     .update(`${relativePath}${expiryTimestamp}`)
     .digest('hex');
 
-  // Parameter resmi ImageKit: ik-s = signature, ik-t = expiry timestamp
   urlObj.searchParams.set('ik-s', signature);
   urlObj.searchParams.set('ik-t', String(expiryTimestamp));
   return urlObj.toString();
@@ -571,6 +657,14 @@ const publicSubmitRateLimiter = createRateLimiter({
   maxAttempts: 10,
   keyGenerator: (req) => getClientIp(req),
   message: 'Batas pengiriman formulir tercapai. Silakan coba lagi nanti.'
+});
+
+const publicPassLookupLimiter = createRateLimiter({
+  namespace: 'public_pass_lookup',
+  windowMs: 10 * 60 * 1000,
+  maxAttempts: 30,
+  keyGenerator: (req) => getClientIp(req),
+  message: 'Terlalu banyak permintaan QR Pass. Silakan tunggu sebentar.'
 });
 
 // ============================================================================
@@ -858,13 +952,25 @@ adminRouter.get('/dashboard', async (req, res, next) => {
         q.style_type,
         q.pin_enabled,
         q.created_at,
-        COUNT(DISTINCT se.id)::INT AS unique_access,
-        COALESCE(SUM(se.hit_count), 0)::INT AS total_scans,
-        COUNT(DISTINCT u.id)::INT AS submitted_users
+        COALESCE(se_agg.unique_visitors, 0)::INT AS unique_visitors,
+        COALESCE(se_agg.total_scans, 0)::INT AS total_scans,
+        COALESCE(u_agg.submitted_users, 0)::INT AS submitted_users
       FROM qr_codes q
-      LEFT JOIN qr_scan_events se ON se.qr_code_id = q.id
-      LEFT JOIN qr_users u ON u.qr_code_id = q.id
-      GROUP BY q.id
+      LEFT JOIN (
+        SELECT
+          qr_code_id,
+          COUNT(*)::INT AS unique_visitors,
+          COALESCE(SUM(hit_count), 0)::INT AS total_scans
+        FROM qr_scan_events
+        GROUP BY qr_code_id
+      ) se_agg ON se_agg.qr_code_id = q.id
+      LEFT JOIN (
+        SELECT
+          qr_code_id,
+          COUNT(*)::INT AS submitted_users
+        FROM qr_users
+        GROUP BY qr_code_id
+      ) u_agg ON u_agg.qr_code_id = q.id
       ORDER BY q.created_at DESC
     `);
 
@@ -874,7 +980,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
     let expiredQr = 0;
     let limitReachedQr = 0;
     let disabledQr = 0;
-    let totalUniqueAccess = 0;
+    let totalUniqueVisitors = 0;
     let totalRawScans = 0;
     let totalSubmittedUsers = 0;
 
@@ -884,7 +990,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
       else if (q.status === 'Limit Reached') limitReachedQr += 1;
       else if (q.status === 'Disabled') disabledQr += 1;
 
-      totalUniqueAccess += q.unique_access;
+      totalUniqueVisitors += q.unique_visitors;
       totalRawScans += q.total_scans;
       totalSubmittedUsers += q.submitted_users;
     }
@@ -931,7 +1037,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
     }
 
     const topByAccess = [...allQrs]
-      .sort((a, b) => b.unique_access - a.unique_access)
+      .sort((a, b) => b.submitted_users - a.submitted_users)
       .slice(0, 7);
 
     const topByUsers = [...allQrs]
@@ -946,7 +1052,7 @@ adminRouter.get('/dashboard', async (req, res, next) => {
         expired_qr: expiredQr,
         limit_reached_qr: limitReachedQr,
         disabled_qr: disabledQr,
-        total_unique_scans: totalUniqueAccess,
+        total_unique_scans: totalUniqueVisitors,
         total_raw_scans: totalRawScans,
         total_submitted_users: totalSubmittedUsers
       },
@@ -958,13 +1064,13 @@ adminRouter.get('/dashboard', async (req, res, next) => {
         },
         top_qr_codes: {
           names: topByAccess.map((q) => q.name),
-          unique_scans: topByAccess.map((q) => q.unique_access),
+          unique_scans: topByAccess.map((q) => q.submitted_users),
           max_access: topByAccess.map((q) => q.max_access)
         },
         users_by_qr: {
           names: topByUsers.map((q) => q.name),
           submitted_users: topByUsers.map((q) => q.submitted_users),
-          unique_scans: topByUsers.map((q) => q.unique_access)
+          unique_scans: topByUsers.map((q) => q.unique_visitors)
         }
       },
       recent_qr_codes: allQrs.slice(0, 10)
@@ -996,13 +1102,25 @@ adminRouter.get('/qr-codes', async (req, res, next) => {
         q.is_disabled,
         q.created_at,
         q.updated_at,
-        COUNT(DISTINCT se.id)::INT AS unique_access,
-        COALESCE(SUM(se.hit_count), 0)::INT AS total_scans,
-        COUNT(DISTINCT u.id)::INT AS submitted_users
+        COALESCE(se_agg.unique_visitors, 0)::INT AS unique_visitors,
+        COALESCE(se_agg.total_scans, 0)::INT AS total_scans,
+        COALESCE(u_agg.submitted_users, 0)::INT AS submitted_users
       FROM qr_codes q
-      LEFT JOIN qr_scan_events se ON se.qr_code_id = q.id
-      LEFT JOIN qr_users u ON u.qr_code_id = q.id
-      GROUP BY q.id
+      LEFT JOIN (
+        SELECT
+          qr_code_id,
+          COUNT(*)::INT AS unique_visitors,
+          COALESCE(SUM(hit_count), 0)::INT AS total_scans
+        FROM qr_scan_events
+        GROUP BY qr_code_id
+      ) se_agg ON se_agg.qr_code_id = q.id
+      LEFT JOIN (
+        SELECT
+          qr_code_id,
+          COUNT(*)::INT AS submitted_users
+        FROM qr_users
+        GROUP BY qr_code_id
+      ) u_agg ON u_agg.qr_code_id = q.id
       ORDER BY q.created_at DESC
     `);
 
@@ -1066,14 +1184,26 @@ adminRouter.get('/qr-codes/:id', async (req, res, next) => {
         q.is_disabled,
         q.created_at,
         q.updated_at,
-        COUNT(DISTINCT se.id)::INT AS unique_access,
-        COALESCE(SUM(se.hit_count), 0)::INT AS total_scans,
-        COUNT(DISTINCT u.id)::INT AS submitted_users
+        COALESCE(se_agg.unique_visitors, 0)::INT AS unique_visitors,
+        COALESCE(se_agg.total_scans, 0)::INT AS total_scans,
+        COALESCE(u_agg.submitted_users, 0)::INT AS submitted_users
        FROM qr_codes q
-       LEFT JOIN qr_scan_events se ON se.qr_code_id = q.id
-       LEFT JOIN qr_users u ON u.qr_code_id = q.id
-       WHERE q.id = $1
-       GROUP BY q.id`,
+       LEFT JOIN (
+         SELECT
+           qr_code_id,
+           COUNT(*)::INT AS unique_visitors,
+           COALESCE(SUM(hit_count), 0)::INT AS total_scans
+         FROM qr_scan_events
+         GROUP BY qr_code_id
+       ) se_agg ON se_agg.qr_code_id = q.id
+       LEFT JOIN (
+         SELECT
+           qr_code_id,
+           COUNT(*)::INT AS submitted_users
+         FROM qr_users
+         GROUP BY qr_code_id
+       ) u_agg ON u_agg.qr_code_id = q.id
+       WHERE q.id = $1`,
       [id]
     );
 
@@ -1239,7 +1369,7 @@ adminRouter.post('/qr-codes', verifyCsrf, async (req, res, next) => {
 
     const created = enrichQrMetrics({
       ...insertRes.rows[0],
-      unique_access: 0,
+      unique_visitors: 0,
       total_scans: 0,
       submitted_users: 0
     });
@@ -1396,14 +1526,26 @@ adminRouter.put('/qr-codes/:id', verifyCsrf, async (req, res, next) => {
       `SELECT
         q.id, q.name, q.slug, q.destination_url, q.logo_url, q.style_type,
         q.max_access, q.expires_at, q.pin_enabled, q.is_disabled, q.created_at, q.updated_at,
-        COUNT(DISTINCT se.id)::INT AS unique_access,
-        COALESCE(SUM(se.hit_count), 0)::INT AS total_scans,
-        COUNT(DISTINCT u.id)::INT AS submitted_users
+        COALESCE(se_agg.unique_visitors, 0)::INT AS unique_visitors,
+        COALESCE(se_agg.total_scans, 0)::INT AS total_scans,
+        COALESCE(u_agg.submitted_users, 0)::INT AS submitted_users
        FROM qr_codes q
-       LEFT JOIN qr_scan_events se ON se.qr_code_id = q.id
-       LEFT JOIN qr_users u ON u.qr_code_id = q.id
-       WHERE q.id = $1
-       GROUP BY q.id`,
+       LEFT JOIN (
+         SELECT
+           qr_code_id,
+           COUNT(*)::INT AS unique_visitors,
+           COALESCE(SUM(hit_count), 0)::INT AS total_scans
+         FROM qr_scan_events
+         GROUP BY qr_code_id
+       ) se_agg ON se_agg.qr_code_id = q.id
+       LEFT JOIN (
+         SELECT
+           qr_code_id,
+           COUNT(*)::INT AS submitted_users
+         FROM qr_users
+         GROUP BY qr_code_id
+       ) u_agg ON u_agg.qr_code_id = q.id
+       WHERE q.id = $1`,
       [id]
     );
 
@@ -1465,6 +1607,7 @@ adminRouter.get('/users', async (req, res, next) => {
   try {
     const search = String(req.query.search || '').trim();
     const qrId = String(req.query.qr_id || '').trim();
+    const statusFilter = String(req.query.status || '').trim().toLowerCase();
     const dateFrom = String(req.query.date_from || '').trim();
     const dateTo = String(req.query.date_to || '').trim();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -1475,12 +1618,19 @@ adminRouter.get('/users', async (req, res, next) => {
 
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`(u.full_name ILIKE $${params.length} OR u.whatsapp_number ILIKE $${params.length})`);
+      conditions.push(
+        `(u.full_name ILIKE $${params.length} OR u.whatsapp_number ILIKE $${params.length} OR u.pass_code ILIKE $${params.length})`
+      );
     }
 
     if (qrId && /^[0-9a-f-]{36}$/i.test(qrId)) {
       params.push(qrId);
       conditions.push(`u.qr_code_id = $${params.length}`);
+    }
+
+    if (['submitted', 'verified', 'rejected'].includes(statusFilter)) {
+      params.push(statusFilter);
+      conditions.push(`u.status = $${params.length}`);
     }
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
@@ -1509,15 +1659,20 @@ adminRouter.get('/users', async (req, res, next) => {
       `SELECT
         u.id,
         u.qr_code_id,
+        u.pass_code,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
         u.full_name,
         u.whatsapp_number,
         u.status,
+        u.check_in_count,
         u.scanned_at,
         u.submitted_at,
+        u.verified_at,
         q.name AS qr_name,
         q.slug AS qr_slug
        FROM qr_users u
        INNER JOIN qr_codes q ON q.id = u.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
        ${whereClause}
        ORDER BY u.submitted_at DESC
        LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
@@ -1526,6 +1681,8 @@ adminRouter.get('/users', async (req, res, next) => {
 
     const data = usersRes.rows.map((row) => ({
       id: row.id,
+      pass_code: row.pass_code,
+      visitor_fingerprint: row.visitor_fingerprint || '-',
       qr_code_id: row.qr_code_id,
       qr_name: row.qr_name,
       qr_slug: row.qr_slug,
@@ -1533,8 +1690,10 @@ adminRouter.get('/users', async (req, res, next) => {
       whatsapp_number: row.whatsapp_number,
       wa_url: `https://wa.me/${row.whatsapp_number}`,
       status: row.status,
+      check_in_count: row.check_in_count || 0,
       scanned_at_wita: formatWita(row.scanned_at),
-      submitted_at_wita: formatWita(row.submitted_at)
+      submitted_at_wita: formatWita(row.submitted_at),
+      verified_at_wita: formatWita(row.verified_at)
     }));
 
     return res.json({
@@ -1563,16 +1722,23 @@ adminRouter.get('/users/:id', async (req, res, next) => {
       `SELECT
         u.id,
         u.qr_code_id,
+        u.pass_code,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
         u.full_name,
         u.whatsapp_number,
         u.status,
+        u.check_in_count,
         u.scanned_at,
         u.submitted_at,
+        u.verified_at,
         q.name AS qr_name,
         q.slug AS qr_slug,
-        q.destination_url
+        q.destination_url,
+        a.username AS verified_by_username
        FROM qr_users u
        INNER JOIN qr_codes q ON q.id = u.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
+       LEFT JOIN admins a ON a.id = u.verified_by_admin_id
        WHERE u.id = $1
        LIMIT 1`,
       [id]
@@ -1587,6 +1753,8 @@ adminRouter.get('/users/:id', async (req, res, next) => {
       success: true,
       data: {
         id: row.id,
+        pass_code: row.pass_code,
+        visitor_fingerprint: row.visitor_fingerprint || '-',
         qr_code_id: row.qr_code_id,
         qr_name: row.qr_name,
         qr_slug: row.qr_slug,
@@ -1595,9 +1763,60 @@ adminRouter.get('/users/:id', async (req, res, next) => {
         whatsapp_number: row.whatsapp_number,
         wa_url: `https://wa.me/${row.whatsapp_number}`,
         status: row.status,
+        check_in_count: row.check_in_count || 0,
+        verified_by: row.verified_by_username || null,
         scanned_at_wita: formatWita(row.scanned_at),
         submitted_at_wita: formatWita(row.submitted_at),
+        verified_at_wita: formatWita(row.verified_at),
         ktp_image_endpoint: `/api/admin/users/${row.id}/ktp`
+      }
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+adminRouter.get('/users/:id/pass-qr', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return res.status(400).json({ success: false, message: 'ID user tidak valid.' });
+    }
+
+    const userRes = await pool.query(
+      `SELECT
+        u.id, u.pass_code, u.pass_token, u.full_name, u.whatsapp_number,
+        u.status, u.submitted_at,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
+        q.name AS qr_name
+       FROM qr_users u
+       INNER JOIN qr_codes q ON q.id = u.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (userRes.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Data user tidak ditemukan.' });
+    }
+
+    const row = userRes.rows[0];
+    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token);
+
+    return res.json({
+      success: true,
+      data: {
+        id: row.id,
+        pass_code: row.pass_code,
+        visitor_fingerprint: row.visitor_fingerprint || '-',
+        qr_name: row.qr_name,
+        full_name: row.full_name,
+        whatsapp_number: row.whatsapp_number,
+        status: row.status,
+        submitted_at_wita: formatWita(row.submitted_at),
+        pass_qr_url: buildPassQrUrl(row.pass_token),
+        pass_qr_data_url: passQrDataUrl
       }
     });
   } catch (err) {
@@ -1677,145 +1896,268 @@ adminRouter.delete('/users/:id', verifyCsrf, async (req, res, next) => {
   }
 });
 
-app.use('/api/admin', adminRouter);
-
-// ============================================================================
-// 11. ATOMIC UNIQUE ACCESS ENGINE & PUBLIC SCANNER ROUTES (/r/:slug & /api/public)
-// ============================================================================
-/**
- * Mengunci baris qr_codes dengan FOR UPDATE di dalam transaksi PostgreSQL agar:
- * 1. Pengunjung baru hanya diterima jika unique_access < max_access.
- * 2. Dua pengunjung bersamaan tidak bisa melampaui max_access (atomic concurrency).
- * 3. Refresh halaman / scan ulang dari visitor_fingerprint yang sama tidak mengurangi sisa kuota.
- * 4. Kuota dihitung saat QR diakses, BUKAN saat form identitas disubmit.
- */
-async function claimOrRefreshQrAccess(slug, visitor) {
+// 10D. Admin QR Pass Scanner & Verification Profile Card
+adminRouter.post('/verify-pass', verifyCsrf, async (req, res, next) => {
   const client = await pool.connect();
   try {
+    const parsedLookup = extractPassLookupIdentifier(req.body?.code_or_token);
+    if (!parsedLookup) {
+      client.release();
+      return res.status(400).json({
+        success: false,
+        message: 'QR Pass atau Unique ID tidak valid. Pastikan memindai QR Pass peserta yang sah.'
+      });
+    }
+
+    let whereCondition = '';
+    if (parsedLookup.type === 'token') {
+      whereCondition = 'u.pass_token = $1';
+    } else if (parsedLookup.type === 'code') {
+      whereCondition = 'UPPER(u.pass_code) = $1';
+    } else {
+      whereCondition = 'u.id::TEXT = $1';
+    }
+
     await client.query('BEGIN');
 
-    // Lock row QR Code untuk menjamin pengecekan dan pencatatan kuota bersifat atomic
-    const qrRes = await client.query(
+    const userRes = await client.query(
       `SELECT
-        id, name, slug, destination_url, logo_url, style_type,
-        max_access, expires_at, pin_enabled, pin_hash, is_disabled
-       FROM qr_codes
-       WHERE slug = $1
-       FOR UPDATE`,
-      [slug]
+        u.id,
+        u.qr_code_id,
+        u.pass_code,
+        u.pass_token,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
+        u.full_name,
+        u.whatsapp_number,
+        u.status,
+        u.check_in_count,
+        u.submitted_at,
+        u.verified_at,
+        u.last_checked_in_at,
+        q.name AS qr_name,
+        q.slug AS qr_slug,
+        q.destination_url,
+        va.username AS previous_verified_by
+       FROM qr_users u
+       INNER JOIN qr_codes q ON q.id = u.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
+       LEFT JOIN admins va ON va.id = u.verified_by_admin_id
+       WHERE ${whereCondition}
+       FOR UPDATE OF u`,
+      [parsedLookup.value]
     );
 
-    if (qrRes.rowCount === 0) {
+    if (userRes.rowCount === 0) {
       await client.query('ROLLBACK');
-      return { status: 'not_found', qr: null, scanEvent: null };
+      return res.status(404).json({
+        success: false,
+        message: 'QR Pass tidak ditemukan dalam sistem. Peserta belum terdaftar atau data telah dihapus.'
+      });
     }
 
-    const qr = qrRes.rows[0];
+    const row = userRes.rows[0];
 
-    if (qr.is_disabled) {
+    if (row.status === 'rejected') {
       await client.query('ROLLBACK');
-      return { status: 'disabled', qr, scanEvent: null };
+      return res.status(403).json({
+        success: false,
+        status: 'rejected',
+        message: 'Pendaftaran peserta ini berstatus DITOLAK (Rejected).'
+      });
     }
 
-    if (new Date(qr.expires_at).getTime() <= Date.now()) {
-      await client.query('ROLLBACK');
-      return { status: 'expired', qr, scanEvent: null };
-    }
+    const isFirstVerification = row.status !== 'verified' || !row.verified_at;
+    const actionType = isFirstVerification ? 'verified' : 're_scanned';
 
-    // Cek apakah pengunjung ini sudah pernah memiliki akses unik pada QR ini
-    const existingRes = await client.query(
-      `SELECT id, pin_verified, first_scanned_at, hit_count
-       FROM qr_scan_events
-       WHERE qr_code_id = $1 AND visitor_fingerprint = $2
-       LIMIT 1`,
-      [qr.id, visitor.fingerprint]
+    const updateRes = await client.query(
+      `UPDATE qr_users
+       SET status = 'verified',
+           verified_at = COALESCE(verified_at, NOW()),
+           verified_by_admin_id = COALESCE(verified_by_admin_id, $2),
+           check_in_count = COALESCE(check_in_count, 0) + 1,
+           last_checked_in_at = NOW()
+       WHERE id = $1
+       RETURNING status, verified_at, check_in_count, last_checked_in_at`,
+      [row.id, req.admin.admin_id]
     );
 
-    if (existingRes.rowCount > 0) {
-      // Pengunjung yang sama (refresh atau scan berulang): tidak menggunakan kuota baru
-      const updatedEventRes = await client.query(
-        `UPDATE qr_scan_events
-         SET hit_count = hit_count + 1,
-             last_scanned_at = NOW(),
-             ip_address = $2
-         WHERE id = $1
-         RETURNING id, pin_verified, first_scanned_at, hit_count`,
-        [existingRes.rows[0].id, visitor.ip]
-      );
+    const updated = updateRes.rows[0];
 
-      const statsRes = await client.query(
-        `SELECT
-          COUNT(*)::INT AS unique_access,
-          COALESCE(SUM(hit_count), 0)::INT AS total_scans
-         FROM qr_scan_events
-         WHERE qr_code_id = $1`,
-        [qr.id]
-      );
-
-      await client.query('COMMIT');
-      const uniqueAccess = statsRes.rows[0].unique_access;
-      return {
-        status: 'valid',
-        qr,
-        scanEvent: updatedEventRes.rows[0],
-        unique_access: uniqueAccess,
-        remaining_access: Math.max(0, qr.max_access - uniqueAccess),
-        total_scans: statsRes.rows[0].total_scans
-      };
-    }
-
-    // Pengunjung baru: hitung jumlah unique_access saat ini
-    const countRes = await client.query(
-      `SELECT
-        COUNT(*)::INT AS unique_access,
-        COALESCE(SUM(hit_count), 0)::INT AS total_scans
-       FROM qr_scan_events
-       WHERE qr_code_id = $1`,
-      [qr.id]
-    );
-
-    const currentUniqueAccess = countRes.rows[0].unique_access;
-    const currentTotalScans = countRes.rows[0].total_scans;
-
-    if (currentUniqueAccess >= qr.max_access) {
-      await client.query('ROLLBACK');
-      return {
-        status: 'limit_reached',
-        qr,
-        scanEvent: null,
-        unique_access: currentUniqueAccess,
-        remaining_access: 0,
-        total_scans: currentTotalScans
-      };
-    }
-
-    // Kuota tersedia -> klaim 1 kuota unique access untuk pengunjung baru ini
-    const insertEventRes = await client.query(
-      `INSERT INTO qr_scan_events (
-        qr_code_id, visitor_fingerprint, ip_address, user_agent, pin_verified, hit_count
+    await client.query(
+      `INSERT INTO qr_pass_verifications (
+        qr_user_id, qr_code_id, admin_id, action_type, scanner_ip, scanner_user_agent
       )
-      VALUES ($1, $2, $3, $4, FALSE, 1)
-      RETURNING id, pin_verified, first_scanned_at, hit_count`,
-      [qr.id, visitor.fingerprint, visitor.ip, visitor.ua]
+      VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        row.id,
+        row.qr_code_id,
+        req.admin.admin_id,
+        actionType,
+        getClientIp(req),
+        (req.headers['user-agent'] || '').slice(0, 500)
+      ]
     );
 
     await client.query('COMMIT');
-    const newUniqueAccess = currentUniqueAccess + 1;
 
-    return {
-      status: 'valid',
-      qr,
-      scanEvent: insertEventRes.rows[0],
-      unique_access: newUniqueAccess,
-      remaining_access: Math.max(0, qr.max_access - newUniqueAccess),
-      total_scans: currentTotalScans + 1
-    };
+    return res.json({
+      success: true,
+      is_first_verification: isFirstVerification,
+      message: isFirstVerification
+        ? 'QR Pass berhasil diverifikasi.'
+        : `QR Pass valid (scan ke-${updated.check_in_count}).`,
+      profile: {
+        user_id: row.id,
+        pass_code: row.pass_code,
+        visitor_fingerprint: row.visitor_fingerprint || '-',
+        event_name: row.qr_name,
+        event_slug: row.qr_slug,
+        full_name: row.full_name,
+        whatsapp_number: row.whatsapp_number,
+        wa_url: `https://wa.me/${row.whatsapp_number}`,
+        status: updated.status,
+        verified_badge: 'VERIFIED',
+        check_in_count: updated.check_in_count,
+        submitted_at_wita: formatWita(row.submitted_at),
+        verified_at_wita: formatWita(updated.verified_at),
+        last_checked_in_at_wita: formatWita(updated.last_checked_in_at),
+        verified_by: isFirstVerification
+          ? req.admin.username
+          : (row.previous_verified_by || req.admin.username),
+        ktp_image_endpoint: `/api/admin/users/${row.id}/ktp`
+      }
+    });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    throw err;
+    return next(err);
   } finally {
     client.release();
   }
+});
+
+adminRouter.get('/verifications', async (req, res, next) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 12));
+    const logsRes = await pool.query(
+      `SELECT
+        v.id,
+        v.action_type,
+        v.scanned_at,
+        u.id AS user_id,
+        u.pass_code,
+        u.full_name,
+        u.whatsapp_number,
+        u.check_in_count,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
+        q.name AS event_name,
+        a.username AS admin_username
+       FROM qr_pass_verifications v
+       INNER JOIN qr_users u ON u.id = v.qr_user_id
+       INNER JOIN qr_codes q ON q.id = v.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
+       LEFT JOIN admins a ON a.id = v.admin_id
+       ORDER BY v.scanned_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    const data = logsRes.rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      pass_code: r.pass_code,
+      full_name: r.full_name,
+      whatsapp_number: r.whatsapp_number,
+      event_name: r.event_name,
+      visitor_fingerprint: r.visitor_fingerprint || '-',
+      action_type: r.action_type,
+      check_in_count: r.check_in_count,
+      admin_username: r.admin_username || 'admin',
+      scanned_at_wita: formatWita(r.scanned_at)
+    }));
+
+    return res.json({
+      success: true,
+      data
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+app.use('/api/admin', adminRouter);
+
+// ============================================================================
+// 11. PUBLIC QR EVALUATION & SUBMIT-BASED QUOTA ENGINE (/r/:slug & /api/public)
+// ============================================================================
+/**
+ * Mengevaluasi status QR Code dan mencatat kunjungan scan pada qr_scan_events.
+ * PENTING: Kuota max_access dihitung dari jumlah user yang SUDAH SUBMIT FORM (qr_users),
+ * bukan dari jumlah kunjungan/scan qr_scan_events.
+ */
+async function evaluateQrAndRecordScan(slug, visitor) {
+  const qrRes = await pool.query(
+    `SELECT
+      id, name, slug, destination_url, logo_url, style_type,
+      max_access, expires_at, pin_enabled, pin_hash, is_disabled
+     FROM qr_codes
+     WHERE slug = $1
+     LIMIT 1`,
+    [slug]
+  );
+
+  if (qrRes.rowCount === 0) {
+    return { status: 'not_found', qr: null, scanEvent: null };
+  }
+
+  const qr = qrRes.rows[0];
+
+  if (qr.is_disabled) {
+    return { status: 'disabled', qr, scanEvent: null };
+  }
+
+  if (new Date(qr.expires_at).getTime() <= Date.now()) {
+    return { status: 'expired', qr, scanEvent: null };
+  }
+
+  // Hitung jumlah peserta yang SUDAH SUBMIT form pada QR Code ini
+  const submittedRes = await pool.query(
+    'SELECT COUNT(*)::INT AS submitted_count FROM qr_users WHERE qr_code_id = $1',
+    [qr.id]
+  );
+  const submittedCount = submittedRes.rows[0].submitted_count;
+
+  if (submittedCount >= qr.max_access) {
+    return {
+      status: 'limit_reached',
+      qr,
+      scanEvent: null,
+      submitted_count: submittedCount,
+      remaining_access: 0
+    };
+  }
+
+  // Catat atau perbarui kunjungan scan untuk analitik dan status PIN visitor
+  const scanUpsertRes = await pool.query(
+    `INSERT INTO qr_scan_events (
+      qr_code_id, visitor_fingerprint, ip_address, user_agent, pin_verified, hit_count
+    )
+    VALUES ($1, $2, $3, $4, FALSE, 1)
+    ON CONFLICT (qr_code_id, visitor_fingerprint)
+    DO UPDATE SET
+      hit_count = qr_scan_events.hit_count + 1,
+      last_scanned_at = NOW(),
+      ip_address = EXCLUDED.ip_address
+    RETURNING id, pin_verified, first_scanned_at, hit_count`,
+    [qr.id, visitor.fingerprint, visitor.ip, visitor.ua]
+  );
+
+  return {
+    status: 'valid',
+    qr,
+    scanEvent: scanUpsertRes.rows[0],
+    submitted_count: submittedCount,
+    remaining_access: Math.max(0, qr.max_access - submittedCount)
+  };
 }
 
 // Endpoint redirect internal saat QR Code dipindai kamera
@@ -1827,7 +2169,7 @@ app.get('/r/:slug', async (req, res, next) => {
     }
 
     const visitor = resolveVisitorIdentity(req, res);
-    const result = await claimOrRefreshQrAccess(slug, visitor);
+    const result = await evaluateQrAndRecordScan(slug, visitor);
 
     if (result.status !== 'valid') {
       return res.redirect(
@@ -1844,7 +2186,7 @@ app.get('/r/:slug', async (req, res, next) => {
 
 const publicRouter = express.Router();
 
-// Memproses scan dan mengevaluasi status QR Code secara atomic
+// Memproses tampilan halaman scan & mengecek kuota form submit
 publicRouter.post('/scan', async (req, res, next) => {
   try {
     const slug = String(req.body?.slug || '').trim();
@@ -1857,7 +2199,7 @@ publicRouter.post('/scan', async (req, res, next) => {
     }
 
     const visitor = resolveVisitorIdentity(req, res);
-    const result = await claimOrRefreshQrAccess(slug, visitor);
+    const result = await evaluateQrAndRecordScan(slug, visitor);
 
     if (result.status === 'not_found') {
       return res.status(404).json({
@@ -1875,7 +2217,7 @@ publicRouter.post('/scan', async (req, res, next) => {
         status: result.status,
         message:
           result.status === 'limit_reached'
-            ? 'Maaf, kuota akses untuk QR Code ini telah mencapai batas maksimal.'
+            ? 'Maaf, kuota pendaftaran untuk QR Code ini telah mencapai batas maksimal.'
             : result.status === 'expired'
               ? 'QR Code ini telah melewati batas masa berlaku.'
               : 'QR Code ini sedang dinonaktifkan oleh administrator.',
@@ -1885,7 +2227,7 @@ publicRouter.post('/scan', async (req, res, next) => {
           logo_url: qr.logo_url,
           style_type: qr.style_type,
           max_access: qr.max_access,
-          unique_access: result.unique_access ?? qr.max_access,
+          unique_access: result.submitted_count ?? qr.max_access,
           remaining_access: result.remaining_access ?? 0,
           expires_at_wita: formatWita(qr.expires_at)
         }
@@ -1911,7 +2253,7 @@ publicRouter.post('/scan', async (req, res, next) => {
         pin_enabled: qr.pin_enabled,
         pin_verified: isPinVerified,
         max_access: qr.max_access,
-        unique_access: result.unique_access,
+        unique_access: result.submitted_count,
         remaining_access: result.remaining_access,
         expires_at_wita: formatWita(qr.expires_at)
       }
@@ -1935,7 +2277,7 @@ publicRouter.post('/verify-pin', pinVerifyRateLimiter, async (req, res, next) =>
     }
 
     const visitor = resolveVisitorIdentity(req, res);
-    const result = await claimOrRefreshQrAccess(slug, visitor);
+    const result = await evaluateQrAndRecordScan(slug, visitor);
 
     if (result.status !== 'valid') {
       return res.status(403).json({
@@ -1943,7 +2285,7 @@ publicRouter.post('/verify-pin', pinVerifyRateLimiter, async (req, res, next) =>
         status: result.status,
         message:
           result.status === 'limit_reached'
-            ? 'Maaf, kuota akses untuk QR Code ini telah mencapai batas maksimal.'
+            ? 'Maaf, kuota pendaftaran untuk QR Code ini telah mencapai batas maksimal.'
             : 'QR Code ini tidak lagi dapat diakses.'
       });
     }
@@ -1983,9 +2325,12 @@ publicRouter.post('/verify-pin', pinVerifyRateLimiter, async (req, res, next) =>
   }
 });
 
-// Pengiriman formulir identitas user + upload KTP privat ke ImageKit
+// Pengiriman formulir identitas user + pemotongan kuota atomic saat submit + QR Pass
 publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => {
   let uploadedKtp = null;
+  const client = await pool.connect();
+  let inTransaction = false;
+
   try {
     const slug = String(req.body?.slug || '').trim();
     const fullName = String(req.body?.full_name || '').trim();
@@ -2018,28 +2363,27 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
     }
 
     const visitor = resolveVisitorIdentity(req, res);
-    const result = await claimOrRefreshQrAccess(slug, visitor);
 
-    if (result.status !== 'valid') {
+    // Pengecekan awal sebelum upload ke ImageKit agar tidak membuang kuota upload jika penuh
+    const preCheck = await evaluateQrAndRecordScan(slug, visitor);
+    if (preCheck.status !== 'valid') {
       return res.status(403).json({
         success: false,
-        status: result.status,
+        status: preCheck.status,
         message:
-          result.status === 'limit_reached'
-            ? 'Maaf, kuota akses untuk QR Code ini telah mencapai batas maksimal.'
+          preCheck.status === 'limit_reached'
+            ? 'Maaf, kuota pendaftaran untuk QR Code ini telah penuh.'
             : 'QR Code sudah tidak aktif atau kedaluwarsa.'
       });
     }
 
-    const { qr, scanEvent } = result;
-
-    if (qr.pin_enabled) {
+    if (preCheck.qr.pin_enabled) {
       const hasValidPinCookie = verifyPinCookieValue(
-        req.cookies?.[`s9_pin_${qr.slug}`],
-        qr.slug,
+        req.cookies?.[`s9_pin_${preCheck.qr.slug}`],
+        preCheck.qr.slug,
         visitor.fingerprint
       );
-      if (!scanEvent?.pin_verified || !hasValidPinCookie) {
+      if (!preCheck.scanEvent?.pin_verified || !hasValidPinCookie) {
         return res.status(403).json({
           success: false,
           status: 'pin_required',
@@ -2048,50 +2392,188 @@ publicRouter.post('/submit', publicSubmitRateLimiter, async (req, res, next) => 
       }
     }
 
+    const { passCode, passToken } = await generateUniquePassCredentials();
+
+    // Unggah KTP privat ke ImageKit
     uploadedKtp = await uploadToImageKit({
       base64Data: ktpBase64,
       folder: '/sector9-qr/ktp',
-      prefix: `ktp_${qr.slug}`,
+      prefix: `ktp_${preCheck.qr.slug}`,
       isPrivateFile: true
     });
 
-    const userInsert = await pool.query(
+    // Mulai transaksi & kunci baris qr_codes (FOR UPDATE) agar perhitungan max_access atomic
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    const lockedQrRes = await client.query(
+      `SELECT id, name, slug, destination_url, max_access, expires_at, is_disabled
+       FROM qr_codes
+       WHERE id = $1
+       FOR UPDATE`,
+      [preCheck.qr.id]
+    );
+
+    if (lockedQrRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      if (uploadedKtp?.fileId) await deleteFromImageKit(uploadedKtp.fileId);
+      return res.status(404).json({ success: false, message: 'QR Code tidak ditemukan.' });
+    }
+
+    const lockedQr = lockedQrRes.rows[0];
+    if (lockedQr.is_disabled || new Date(lockedQr.expires_at).getTime() <= Date.now()) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      if (uploadedKtp?.fileId) await deleteFromImageKit(uploadedKtp.fileId);
+      return res.status(403).json({
+        success: false,
+        message: 'QR Code sudah kedaluwarsa atau dinonaktifkan saat pengiriman data.'
+      });
+    }
+
+    // Hitung ulang jumlah form submit yang sudah masuk di dalam lock transaksi
+    const currentSubmitCountRes = await client.query(
+      'SELECT COUNT(*)::INT AS submitted_count FROM qr_users WHERE qr_code_id = $1',
+      [lockedQr.id]
+    );
+    const currentSubmittedCount = currentSubmitCountRes.rows[0].submitted_count;
+
+    if (currentSubmittedCount >= lockedQr.max_access) {
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      if (uploadedKtp?.fileId) await deleteFromImageKit(uploadedKtp.fileId);
+      return res.status(403).json({
+        success: false,
+        status: 'limit_reached',
+        message: 'Maaf, kuota pendaftaran untuk QR Code ini baru saja penuh.'
+      });
+    }
+
+    const userInsert = await client.query(
       `INSERT INTO qr_users (
-        qr_code_id, scan_event_id, full_name, whatsapp_number,
-        ktp_image_url, ktp_file_id, status, scanned_at, submitted_at
+        qr_code_id, scan_event_id, pass_code, pass_token, visitor_fingerprint,
+        full_name, whatsapp_number, ktp_image_url, ktp_file_id,
+        status, scanned_at, submitted_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'submitted', $7, NOW())
-      RETURNING id, submitted_at`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'submitted', $10, NOW())
+      RETURNING id, pass_code, pass_token, visitor_fingerprint, status, submitted_at`,
       [
-        qr.id,
-        scanEvent.id,
+        lockedQr.id,
+        preCheck.scanEvent.id,
+        passCode,
+        passToken,
+        visitor.fingerprint,
         fullName,
         whatsappNumber,
         uploadedKtp.url,
         uploadedKtp.fileId,
-        scanEvent.first_scanned_at
+        preCheck.scanEvent.first_scanned_at
       ]
     );
 
+    await client.query('COMMIT');
+    inTransaction = false;
+
     const savedUser = userInsert.rows[0];
+    const passQrUrl = buildPassQrUrl(savedUser.pass_token);
+    const passQrDataUrl = await renderPassQrDataUrl(savedUser.pass_token);
 
     return res.status(201).json({
       success: true,
-      message: 'Data identitas berhasil diverifikasi dan disimpan.',
+      message: 'Data identitas berhasil disimpan. Silakan simpan QR Pass Anda.',
       data: {
         id: savedUser.id,
-        qr_name: qr.name,
-        destination_url: qr.destination_url,
-        submitted_at_wita: formatWita(savedUser.submitted_at)
+        pass_code: savedUser.pass_code,
+        pass_token: savedUser.pass_token,
+        visitor_fingerprint: savedUser.visitor_fingerprint,
+        qr_name: lockedQr.name,
+        full_name: fullName,
+        whatsapp_number: whatsappNumber,
+        status: savedUser.status,
+        destination_url: lockedQr.destination_url,
+        submitted_at_wita: formatWita(savedUser.submitted_at),
+        pass_qr_url: passQrUrl,
+        pass_qr_data_url: passQrDataUrl
       }
     });
   } catch (err) {
+    if (inTransaction) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
     if (uploadedKtp?.fileId) {
       await deleteFromImageKit(uploadedKtp.fileId);
     }
     if (err.message && (err.message.includes('Format') || err.message.includes('Ukuran') || err.message.includes('gambar'))) {
       return res.status(400).json({ success: false, message: err.message });
     }
+    return next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// Mengambil kembali QR Pass user menggunakan pass_token
+publicRouter.get('/pass/:token', publicPassLookupLimiter, async (req, res, next) => {
+  try {
+    const token = String(req.params.token || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token QR Pass tidak valid.'
+      });
+    }
+
+    const passRes = await pool.query(
+      `SELECT
+        u.id,
+        u.pass_code,
+        u.pass_token,
+        COALESCE(u.visitor_fingerprint, se.visitor_fingerprint) AS visitor_fingerprint,
+        u.full_name,
+        u.whatsapp_number,
+        u.status,
+        u.submitted_at,
+        u.verified_at,
+        q.name AS qr_name,
+        q.destination_url
+       FROM qr_users u
+       INNER JOIN qr_codes q ON q.id = u.qr_code_id
+       LEFT JOIN qr_scan_events se ON se.id = u.scan_event_id
+       WHERE u.pass_token = $1
+       LIMIT 1`,
+      [token]
+    );
+
+    if (passRes.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'QR Pass tidak ditemukan.'
+      });
+    }
+
+    const row = passRes.rows[0];
+    const passQrDataUrl = await renderPassQrDataUrl(row.pass_token);
+
+    return res.json({
+      success: true,
+      data: {
+        id: row.id,
+        pass_code: row.pass_code,
+        pass_token: row.pass_token,
+        visitor_fingerprint: row.visitor_fingerprint || '-',
+        qr_name: row.qr_name,
+        full_name: row.full_name,
+        whatsapp_number: row.whatsapp_number,
+        status: row.status,
+        destination_url: row.destination_url,
+        submitted_at_wita: formatWita(row.submitted_at),
+        verified_at_wita: formatWita(row.verified_at),
+        pass_qr_url: buildPassQrUrl(row.pass_token),
+        pass_qr_data_url: passQrDataUrl
+      }
+    });
+  } catch (err) {
     return next(err);
   }
 });
@@ -2115,7 +2597,7 @@ function sendHtmlPage(res, filename) {
   return res.sendFile(filePath);
 }
 
-app.get(['/dashboard.html', '/qr-manage.html', '/user-list.html'], (req, res) => {
+app.get(['/dashboard.html', '/qr-manage.html', '/user-list.html', '/admin-scan.html'], (req, res) => {
   return res.redirect(302, '/');
 });
 
@@ -2145,6 +2627,10 @@ app.get('/manage-qr', requireAdminPage, (req, res) => {
 
 app.get('/user-list', requireAdminPage, (req, res) => {
   return sendHtmlPage(res, 'user-list.html');
+});
+
+app.get('/admin-scan', requireAdminPage, (req, res) => {
+  return sendHtmlPage(res, 'admin-scan.html');
 });
 
 // ============================================================================

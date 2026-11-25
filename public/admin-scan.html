@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Admin QR Pass Scanner — Sector9 QR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #ffffff;
+      color: #000000;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @keyframes scanLine {
+      0%, 100% { top: 10%; }
+      50% { top: 88%; }
+    }
+    .scanner-laser {
+      animation: scanLine 2.2s ease-in-out infinite;
+    }
+    @keyframes popIn {
+      0% {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @keyframes slideInRight {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(0); }
+    }
+    #mobileNavDrawer:not(.hidden) {
+      display: flex;
+      animation: slideInRight 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    #mobileNavBackdrop { display: none; }
+    #mobileNavDrawer:not(.hidden) + #mobileNavBackdrop {
+      display: block;
+      animation: fadeInBackdrop 0.25s ease forwards;
+    }
+    @keyframes fadeInBackdrop {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    .animate-pop-in {
+      animation: popIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="min-h-[100dvh] bg-white text-black antialiased overflow-x-hidden flex flex-col selection:bg-black selection:text-white">
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed top-16 right-3 left-3 sm:left-auto sm:right-4 z-[60] flex flex-col gap-2 sm:max-w-sm pointer-events-none"></div>
+
+  <!-- Responsive Editorial Navbar with Mobile Hamburger Menu -->
+  <header class="border-b border-black bg-white sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-14 sm:h-16">
+        <!-- Left: Hamburger (mobile) + Brand -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <button
+            id="btnMobileMenu"
+            type="button"
+            aria-label="Buka Menu Navigasi"
+            aria-expanded="false"
+            class="md:hidden w-11 h-11 shrink-0 flex items-center justify-center border border-black bg-white active:bg-black active:text-white transition-colors cursor-pointer"
+          >
+            <!-- Hamburger Icon -->
+            <svg id="iconMenuOpen" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="square" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <!-- Close Icon -->
+            <svg id="iconMenuClose" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="square" d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        <a href="/dashboard" class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 shrink-0 bg-black text-white flex items-center justify-center font-mono-code text-xs font-extrabold tracking-tighter">
+            S9
+          </div>
+          <div class="truncate">
+            <span class="font-extrabold tracking-tight text-sm sm:text-base uppercase">Sector9 QR</span>
+            <span class="hidden lg:inline-block ml-2 text-[11px] font-mono-code uppercase tracking-widest text-neutral-500 border-l border-neutral-300 pl-2">
+              Pass Verification
+            </span>
+          </div>
+        </a>
+
+        </div>
+
+        <!-- Desktop Navigation -->
+        <nav class="hidden md:flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider">
+          <a href="/dashboard" class="px-3 py-2 border border-transparent hover:border-black transition-colors">
+            Dashboard
+          </a>
+          <a href="/manage-qr" class="px-3 py-2 border border-transparent hover:border-black transition-colors">
+            Manage QR
+          </a>
+          <a href="/admin-scan" class="px-3 py-2 bg-black text-white border border-black">
+            Scan Pass
+          </a>
+          <a href="/user-list" class="px-3 py-2 border border-transparent hover:border-black transition-colors">
+            User List
+          </a>
+          <button
+            id="btnLogoutDesktop"
+            type="button"
+            class="ml-2 px-3 py-2 border border-black hover:bg-black hover:text-white transition-colors cursor-pointer"
+          >
+            Logout
+          </button>
+        </nav>
+
+        <!-- Mobile Right: Operator Badge -->
+        <span id="adminBadgeMobile" class="md:hidden font-mono-code text-[10px] font-bold uppercase border border-black px-2 py-1 max-w-[96px] truncate shrink-0">
+          ADMIN
+        </span>
+      </div>
+    </div>
+
+    <!-- Mobile Hamburger Dropdown Drawer -->
+    <div id="mobileNavDrawer" class="hidden md:hidden fixed top-0 left-0 bottom-0 h-[100dvh] w-[82%] max-w-[320px] z-[55] flex-col border-r-2 border-black bg-white px-4 pt-0 pb-4 space-y-2 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div class="-mx-4 px-4 h-14 shrink-0 flex items-center justify-between border-b border-black bg-black text-white">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 bg-white text-black flex items-center justify-center font-mono-code text-xs font-extrabold tracking-tighter">S9</div>
+          <span class="font-extrabold tracking-tight text-sm uppercase">Sector9 QR</span>
+        </div>
+        <button type="button" aria-label="Tutup Menu" onclick="document.getElementById('btnMobileMenu').click()" class="w-9 h-9 flex items-center justify-center border border-white active:bg-white active:text-black cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="square" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+      <div class="font-mono-code text-[10px] uppercase tracking-[0.2em] text-neutral-500 pt-3 pb-1">Navigasi</div>
+      <a href="/dashboard" class="flex items-center justify-between w-full px-3.5 py-3 border border-neutral-200 text-xs font-bold uppercase tracking-wider active:bg-neutral-100">
+        <span>01 / Dashboard</span>
+        <span class="font-mono-code text-neutral-400">→</span>
+      </a>
+      <a href="/manage-qr" class="flex items-center justify-between w-full px-3.5 py-3 border border-neutral-200 text-xs font-bold uppercase tracking-wider active:bg-neutral-100">
+        <span>02 / Manage QR</span>
+        <span class="font-mono-code text-neutral-400">→</span>
+      </a>
+      <a href="/admin-scan" class="flex items-center justify-between w-full px-3.5 py-3 bg-black text-white border border-black text-xs font-bold uppercase tracking-wider">
+        <span>03 / Scan Pass</span>
+        <span class="font-mono-code text-[10px]">AKTIF</span>
+      </a>
+      <a href="/user-list" class="flex items-center justify-between w-full px-3.5 py-3 border border-neutral-200 text-xs font-bold uppercase tracking-wider active:bg-neutral-100">
+        <span>04 / User List</span>
+        <span class="font-mono-code text-neutral-400">→</span>
+      </a>
+      <div class="mt-auto pt-3 border-t border-neutral-200 flex items-center justify-between gap-3">
+        <div class="font-mono-code text-[11px] text-neutral-600 truncate">
+          LOGIN: <span id="adminUsernameMobileDrawer" class="text-black font-bold">-</span>
+        </div>
+        <button
+          id="btnLogoutMobile"
+          type="button"
+          class="px-4 py-2.5 border border-black bg-white text-black text-xs font-bold uppercase tracking-wider active:bg-black active:text-white cursor-pointer"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+    <div id="mobileNavBackdrop" class="md:hidden fixed inset-0 z-[54] bg-black/55"></div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+
+    <!-- Compact Page Header -->
+    <div class="border-b-2 border-black pb-4 mb-5 sm:mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
+      <div>
+        <p class="font-mono-code text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+          03 / Admin QR Pass Scanner
+        </p>
+        <h1 class="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight uppercase mt-0.5">
+          Scan QR Peserta
+        </h1>
+      </div>
+      <div class="hidden sm:block text-right font-mono-code text-xs text-neutral-600">
+        <div>OPERATOR: <span id="adminUsernameDesktop" class="text-black font-bold">...</span></div>
+        <div>ZONE: <span class="text-black">ASIA/MAKASSAR (WITA)</span></div>
+      </div>
+    </div>
+
+    <!-- Responsive Two-Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+
+      <!-- Left / Primary Mobile Scanner Card -->
+      <section class="lg:col-span-7 border-2 border-black bg-white">
+        <div class="border-b border-black px-4 py-3 flex items-center justify-between bg-neutral-50">
+          <div class="flex items-center gap-2">
+            <span class="font-mono-code text-xs font-bold uppercase tracking-wider">
+              Kamera Pemindai
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              id="btnTestBeep"
+              type="button"
+              title="Tes Suara Bip"
+              class="font-mono-code text-[10px] uppercase px-2 py-1 border border-black bg-white hover:bg-black hover:text-white transition-colors cursor-pointer"
+            >
+              🔊 Tes Bip
+            </button>
+            <span id="cameraStatusBadge" class="font-mono-code text-[10px] font-bold uppercase px-2 py-1 border border-black bg-white">
+              STANDBY
+            </span>
+          </div>
+        </div>
+
+        <div class="p-4 sm:p-5 space-y-4">
+          <!-- Native-Like Camera Viewport -->
+          <div class="relative w-full aspect-[4/5] sm:aspect-square max-h-[62dvh] sm:max-h-[460px] mx-auto bg-neutral-950 border border-black overflow-hidden flex items-center justify-center">
+            <video id="scannerVideo" class="w-full h-full object-cover hidden" playsinline muted></video>
+            <canvas id="scannerCanvas" class="hidden"></canvas>
+
+            <!-- Standby Placeholder -->
+            <div id="cameraPlaceholder" class="text-center px-6 text-white">
+              <div class="w-14 h-14 mx-auto mb-3 border border-white/40 flex items-center justify-center">
+                <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24">
+                  <path stroke-linecap="square" d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3M8 12h8" />
+                </svg>
+              </div>
+              <p class="text-xs font-mono-code uppercase tracking-wider text-neutral-200">
+                Kamera Siap Diaktifkan
+              </p>
+              <p class="text-xs text-neutral-400 mt-1 leading-relaxed">
+                Tekan tombol di bawah untuk memindai QR Pass milik peserta.
+              </p>
+            </div>
+
+            <!-- Viewfinder Overlay -->
+            <div id="scannerOverlay" class="hidden absolute inset-0 pointer-events-none">
+              <div class="absolute inset-7 sm:inset-9 border border-white/60">
+                <div class="absolute -top-0.5 -left-0.5 w-6 h-6 border-t-[3px] border-l-[3px] border-white"></div>
+                <div class="absolute -top-0.5 -right-0.5 w-6 h-6 border-t-[3px] border-r-[3px] border-white"></div>
+                <div class="absolute -bottom-0.5 -left-0.5 w-6 h-6 border-b-[3px] border-l-[3px] border-white"></div>
+                <div class="absolute -bottom-0.5 -right-0.5 w-6 h-6 border-b-[3px] border-r-[3px] border-white"></div>
+                <div id="scannerLaserLine" class="scanner-laser absolute left-2 right-2 h-0.5 bg-white shadow-[0_0_10px_#fff]"></div>
+              </div>
+
+              <!-- Paused Indicator while Popup Modal is Open -->
+              <div id="scannerPausedBanner" class="hidden absolute inset-0 bg-black/70 flex items-center justify-center p-4 text-center">
+                <div class="border border-white bg-black text-white px-4 py-2.5 font-mono-code text-[11px] uppercase tracking-wider">
+                  Pemindaian Dijeda • Tutup Popup Card Untuk Lanjut
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Touch-Friendly Camera Controls (min-h 48px) -->
+          <div class="grid grid-cols-5 gap-2.5">
+            <button
+              id="btnToggleCamera"
+              type="button"
+              class="col-span-3 min-h-[52px] px-4 bg-black text-white text-xs font-bold uppercase tracking-wider border border-black active:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              Aktifkan Kamera
+            </button>
+            <button
+              id="btnSwitchCamera"
+              type="button"
+              disabled
+              class="col-span-2 min-h-[52px] px-3 bg-white text-black text-xs font-bold uppercase tracking-wider border border-black disabled:opacity-40 disabled:cursor-not-allowed active:bg-neutral-100 transition-colors cursor-pointer"
+            >
+              Ganti Kamera
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right / Alternative Input & Quick Guide -->
+      <section class="lg:col-span-5 space-y-5">
+        <!-- Manual Unique Code / Image Upload Card -->
+        <div class="border-2 border-black bg-white">
+          <div class="border-b border-black px-4 py-3 bg-neutral-50">
+            <span class="font-mono-code text-xs font-bold uppercase tracking-wider">
+              Input Manual &amp; Galeri QR
+            </span>
+          </div>
+
+          <div class="p-4 sm:p-5 space-y-4">
+            <!-- Manual Form -->
+            <form id="manualVerifyForm" class="space-y-2">
+              <label for="manualPassInput" class="block font-mono-code text-[11px] uppercase tracking-wider text-neutral-600">
+                Masukkan Unique Code Peserta
+              </label>
+              <div class="flex gap-2">
+                <input
+                  id="manualPassInput"
+                  type="text"
+                  placeholder="S9-XXXXXXXX"
+                  autocomplete="off"
+                  class="flex-1 min-w-0 min-h-[46px] px-3.5 border border-black font-mono-code text-sm uppercase focus:outline-none focus:bg-neutral-50"
+                />
+                <button
+                  type="submit"
+                  class="min-h-[46px] px-5 bg-black text-white text-xs font-bold uppercase tracking-wider border border-black active:bg-neutral-800 transition-colors cursor-pointer shrink-0"
+                >
+                  Cek Pass
+                </button>
+              </div>
+            </form>
+
+            <!-- Upload QR Image -->
+            <div class="border-t border-neutral-200 pt-4">
+              <label class="block font-mono-code text-[11px] uppercase tracking-wider text-neutral-600 mb-2">
+                Scan Dari Foto / Screenshot QR
+              </label>
+              <label class="flex items-center justify-center gap-2 w-full min-h-[46px] px-4 border border-dashed border-black active:bg-neutral-100 transition-colors cursor-pointer text-xs font-bold uppercase tracking-wider">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="square" d="M4 16v4h16v-4M12 4v12m0-12l-4 4m4-4l4 4" />
+                </svg>
+                <span>Pilih Gambar QR Pass</span>
+                <input id="inputQrImageFile" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Operational Flow Guide Box -->
+        <div class="border border-black bg-neutral-50 p-4 sm:p-5 space-y-2.5">
+          <div class="font-mono-code text-[11px] font-bold uppercase tracking-wider">
+            Prosedur Verifikasi Lapangan
+          </div>
+          <ol class="text-xs text-neutral-700 space-y-1.5 list-decimal list-inside leading-relaxed">
+            <li>Arahkan kamera ke QR Pass peserta hingga terdengar bunyi <b>BIP</b>.</li>
+            <li>Periksa kartu profil <b>VERIFIED</b> (Nama Event, Nama User, Nomor HP, Unique Code, dan Fingerprint).</li>
+            <li>Tekan tombol <b>CLOSE</b> di bagian bawah kartu untuk menutup popup dan memindai peserta berikutnya.</li>
+          </ol>
+        </div>
+      </section>
+    </div>
+
+    <!-- Recent Verification Log (Mobile Cards + Desktop Table) -->
+    <section class="mt-6 sm:mt-8 border-2 border-black bg-white">
+      <div class="border-b border-black px-4 py-3 flex items-center justify-between bg-neutral-50">
+        <span class="font-mono-code text-xs font-bold uppercase tracking-wider">
+          Riwayat Scan Terbaru
+        </span>
+        <button
+          id="btnRefreshLogs"
+          type="button"
+          class="font-mono-code text-xs font-bold underline uppercase py-1 px-2 cursor-pointer"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <!-- Mobile Card List (< sm) -->
+      <div id="verificationLogsMobile" class="sm:hidden divide-y divide-neutral-200">
+        <div class="p-5 text-center font-mono-code text-xs text-neutral-500">
+          Memuat riwayat verifikasi...
+        </div>
+      </div>
+
+      <!-- Desktop Table (>= sm) -->
+      <div class="hidden sm:block overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-black font-mono-code text-[11px] uppercase tracking-wider bg-white">
+              <th class="py-3 px-4">Waktu (WITA)</th>
+              <th class="py-3 px-4">Unique Code</th>
+              <th class="py-3 px-4">Nama Peserta</th>
+              <th class="py-3 px-4">Event</th>
+              <th class="py-3 px-4">WhatsApp</th>
+              <th class="py-3 px-4">Status</th>
+            </tr>
+          </thead>
+          <tbody id="verificationLogsDesktop" class="divide-y divide-neutral-200 text-xs">
+            <tr>
+              <td colspan="6" class="py-6 px-4 text-center text-neutral-500 font-mono-code">
+                Memuat riwayat verifikasi...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================================================================== -->
+  <!-- POPUP PROFILE CARD MODAL (LOCKS SCANNER UNTIL CLOSE BUTTON IS CLICKED)   -->
+  <!-- ======================================================================== -->
+  <div
+    id="profilePopupOverlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="popupCardTitle"
+    class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+  >
+    <!-- Popup Card Container -->
+    <div class="animate-pop-in bg-white border-t-2 sm:border-2 border-black w-full sm:max-w-lg max-h-[94dvh] flex flex-col shadow-[0_-8px_30px_rgba(0,0,0,0.35)] sm:shadow-[10px_10px_0px_0px_#000000]">
+
+      <!-- Top Modal Header -->
+      <div class="bg-black text-white px-5 py-4 flex items-center justify-between gap-2 shrink-0">
+        <div>
+          <div class="font-mono-code text-[10px] uppercase tracking-[0.2em] text-neutral-400">
+            SECTOR9 // IDENTITY PASS
+          </div>
+          <h2 id="popupCardTitle" class="text-sm font-extrabold uppercase tracking-wider mt-0.5">
+            Profil Peserta Terverifikasi
+          </h2>
+        </div>
+
+        <!-- Verified Label Badge -->
+        <span
+          id="popupVerifiedBadge"
+          class="inline-flex items-center gap-1.5 bg-white text-black font-mono-code text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 shrink-0"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.8" viewBox="0 0 24 24">
+            <path stroke-linecap="square" d="M5 13l4 4L19 7" />
+          </svg>
+          VERIFIED
+        </span>
+      </div>
+
+      <!-- Scrollable Popup Body -->
+      <div class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+
+        <!-- Success Content Wrapper -->
+        <div id="popupSuccessContent" class="space-y-4">
+          <!-- Nama Event Banner -->
+          <div class="border border-black bg-neutral-50 px-4 py-3 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                NAMA EVENT
+              </div>
+              <div id="popupEventName" class="text-sm sm:text-base font-extrabold uppercase tracking-tight truncate mt-0.5">
+                -
+              </div>
+            </div>
+            <span
+              id="popupScanCountBadge"
+              class="shrink-0 font-mono-code text-[10px] font-bold uppercase px-2.5 py-1 border border-black bg-white"
+            >
+              SCAN #1
+            </span>
+          </div>
+
+          <!-- Nama User & Nomor HP -->
+          <div class="border border-black p-4 space-y-3.5">
+            <div>
+              <div class="font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                NAMA USER
+              </div>
+              <div id="popupFullName" class="text-xl sm:text-2xl font-extrabold tracking-tight break-words mt-0.5">
+                -
+              </div>
+            </div>
+
+            <div class="border-t border-neutral-200 pt-3 flex items-center justify-between gap-3">
+              <div>
+                <div class="font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                  NOMOR HP / WHATSAPP
+                </div>
+                <div id="popupPhoneNumber" class="font-mono-code text-base sm:text-lg font-bold mt-0.5">
+                  -
+                </div>
+              </div>
+              <a
+                id="popupWaLink"
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="min-h-[38px] inline-flex items-center px-3 py-1.5 border border-black font-mono-code text-[11px] font-bold uppercase hover:bg-black hover:text-white transition-colors shrink-0"
+              >
+                Chat WA ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- Foto KTP Peserta (langsung tampil) -->
+          <div class="border border-black bg-white">
+            <div class="border-b border-black px-4 py-2 bg-neutral-50 font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+              FOTO KTP PESERTA
+            </div>
+            <div id="popupKtpBox" class="p-2 bg-neutral-100">
+              <img id="popupKtpImage" src="" alt="Foto KTP Peserta" class="max-h-64 w-auto mx-auto object-contain" />
+            </div>
+          </div>
+
+          <!-- Unique Code & Fingerprint Box -->
+          <div class="border border-black bg-neutral-50 p-4 space-y-3">
+            <!-- Unique Code -->
+            <div class="flex items-center justify-between gap-2 border-b border-neutral-200 pb-3">
+              <div>
+                <div class="font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                  UNIQUE CODE
+                </div>
+                <div id="popupUniqueCode" class="font-mono-code text-base sm:text-lg font-extrabold tracking-wider mt-0.5">
+                  S9-00000000
+                </div>
+              </div>
+              <button
+                id="btnCopyUniqueCode"
+                type="button"
+                class="min-h-[36px] px-3 border border-black bg-white font-mono-code text-[11px] font-bold uppercase active:bg-black active:text-white cursor-pointer"
+              >
+                Salin
+              </button>
+            </div>
+
+            <!-- Visitor Fingerprint -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-mono-code text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+                  VISITOR FINGERPRINT
+                </span>
+                <button
+                  id="btnCopyFingerprint"
+                  type="button"
+                  class="font-mono-code text-[11px] font-bold underline uppercase py-0.5 px-1 cursor-pointer"
+                >
+                  Salin Hash
+                </button>
+              </div>
+              <div
+                id="popupFingerprint"
+                class="font-mono-code text-[11px] leading-relaxed break-all bg-white border border-neutral-300 px-3 py-2 text-neutral-900"
+              >
+                -
+              </div>
+            </div>
+
+            <!-- Timestamp Meta -->
+            <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+              <div>
+                <span class="block font-mono-code text-[9px] uppercase text-neutral-500">TERDAFTAR (WITA)</span>
+                <span id="popupSubmittedAt" class="font-mono-code font-semibold">-</span>
+              </div>
+              <div>
+                <span class="block font-mono-code text-[9px] uppercase text-neutral-500">DIVERIFIKASI (WITA)</span>
+                <span id="popupVerifiedAt" class="font-mono-code font-semibold">-</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Error Content Wrapper (jika QR tidak valid) -->
+        <div id="popupErrorContent" class="hidden border border-black bg-neutral-50 p-5 space-y-2 text-center">
+          <div class="inline-block bg-black text-white font-mono-code text-[11px] font-bold uppercase px-3 py-1">
+            SCAN DITOLAK
+          </div>
+          <h3 class="text-base font-extrabold uppercase pt-1">QR Pass Tidak Valid</h3>
+          <p id="popupErrorMessage" class="text-xs text-neutral-700 leading-relaxed"></p>
+        </div>
+
+      </div>
+
+      <!-- Sticky Footer with Mandatory CLOSE Button -->
+      <div class="border-t border-black p-4 bg-white shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <button
+          id="btnClosePopupCard"
+          type="button"
+          class="w-full min-h-[50px] bg-black text-white text-xs sm:text-sm font-extrabold uppercase tracking-widest border border-black active:bg-neutral-800 transition-colors cursor-pointer"
+        >
+          Close &amp; Scan QR Berikutnya
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      let csrfToken = '';
+      let videoStream = null;
+      let scanAnimationFrame = null;
+      let facingMode = 'environment';
+      let isVerifying = false;
+      let isPopupOpen = false; // Mengunci scanner sampai tombol Close di popup diklik
+      let currentKtpEndpoint = '';
+      let audioCtx = null;
+
+      const videoEl = document.getElementById('scannerVideo');
+      const canvasEl = document.getElementById('scannerCanvas');
+      const canvasCtx = canvasEl.getContext('2d', { willReadFrequently: true });
+      const placeholderEl = document.getElementById('cameraPlaceholder');
+      const overlayEl = document.getElementById('scannerOverlay');
+      const pausedBannerEl = document.getElementById('scannerPausedBanner');
+      const statusBadgeEl = document.getElementById('cameraStatusBadge');
+      const btnToggleCamera = document.getElementById('btnToggleCamera');
+      const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+
+      // ======================================================================
+      // 1. WEB AUDIO API BEEP GENERATOR (TANPA FILE EKSTERNAL)
+      // ======================================================================
+      function unlockAudio() {
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          if (!audioCtx) {
+            audioCtx = new AudioContextClass();
+          }
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+        } catch {
+          // Abaikan jika browser membatasi audio
+        }
+      }
+
+      function playScanBeep(isSuccess = true) {
+        try {
+          unlockAudio();
+          if (!audioCtx) return;
+
+          const now = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+
+          osc.type = 'sine';
+
+          if (isSuccess) {
+            // Nada bip scanner 2-step yang jernih (880Hz -> 1320Hz)
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(1320, now + 0.08);
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.exponentialRampToValueAtTime(0.28, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.23);
+          } else {
+            // Nada rendah untuk error
+            osc.frequency.setValueAtTime(300, now);
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.exponentialRampToValueAtTime(0.25, now + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.29);
+          }
+
+          if (navigator.vibrate) {
+            navigator.vibrate(isSuccess ? 100 : [80, 60, 80]);
+          }
+        } catch {
+          // Abaikan kegagalan audio
+        }
+      }
+
+      // ======================================================================
+      // 2. TOAST & ESCAPE HELPERS
+      // ======================================================================
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        const isError = type === 'error';
+        toast.className = `pointer-events-auto border border-black px-4 py-3 text-xs font-semibold shadow-[4px_4px_0px_0px_#000] transition-opacity duration-200 ${
+          isError ? 'bg-black text-white' : 'bg-white text-black'
+        }`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 220);
+        }, 3000);
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // ======================================================================
+      // 3. MOBILE HAMBURGER NAVBAR LOGIC
+      // ======================================================================
+      const btnMobileMenu = document.getElementById('btnMobileMenu');
+      const mobileNavDrawer = document.getElementById('mobileNavDrawer');
+      const iconMenuOpen = document.getElementById('iconMenuOpen');
+      const iconMenuClose = document.getElementById('iconMenuClose');
+
+      function setMobileMenuOpen(open) {
+        btnMobileMenu.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+          mobileNavDrawer.classList.remove('hidden');
+          iconMenuOpen.classList.add('hidden');
+          iconMenuClose.classList.remove('hidden');
+        } else {
+          mobileNavDrawer.classList.add('hidden');
+          iconMenuOpen.classList.remove('hidden');
+          iconMenuClose.classList.add('hidden');
+        }
+      }
+
+      btnMobileMenu.addEventListener('click', () => {
+        const isCurrentlyOpen = !mobileNavDrawer.classList.contains('hidden');
+        setMobileMenuOpen(!isCurrentlyOpen);
+      });
+
+      // Tutup menu mobile saat klik di luar navbar
+      document.addEventListener('click', (e) => {
+        if (!mobileNavDrawer.classList.contains('hidden')) {
+          if (!mobileNavDrawer.contains(e.target) && !btnMobileMenu.contains(e.target)) {
+            setMobileMenuOpen(false);
+          }
+        }
+      });
+
+      // ======================================================================
+      // 4. SESSION AUTHENTICATION
+      // ======================================================================
+      async function initAdminSession() {
+        try {
+          const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+          if (!res.ok) {
+            window.location.href = '/';
+            return;
+          }
+          const data = await res.json();
+          csrfToken = data.csrfToken;
+          const uname = data.admin.username;
+          document.getElementById('adminUsernameDesktop').textContent = uname;
+          document.getElementById('adminUsernameMobileDrawer').textContent = uname;
+          document.getElementById('adminBadgeMobile').textContent = uname;
+        } catch {
+          window.location.href = '/';
+        }
+      }
+
+      // ======================================================================
+      // 5. POPUP CARD CONTROL (LOCK & UNLOCK SCANNER)
+      // ======================================================================
+      function openSuccessPopup(profile, isFirstVerification) {
+        isPopupOpen = true;
+        updateScannerPauseUi();
+
+        document.getElementById('popupCardTitle').textContent = 'Profil Peserta Terverifikasi';
+        const badgeEl = document.getElementById('popupVerifiedBadge');
+        badgeEl.classList.remove('hidden');
+        badgeEl.classList.add('inline-flex');
+
+        document.getElementById('popupErrorContent').classList.add('hidden');
+        document.getElementById('popupSuccessContent').classList.remove('hidden');
+
+        document.getElementById('popupEventName').textContent = profile.event_name;
+        document.getElementById('popupFullName').textContent = profile.full_name;
+        document.getElementById('popupPhoneNumber').textContent = `+${profile.whatsapp_number}`;
+        document.getElementById('popupWaLink').href = profile.wa_url;
+        document.getElementById('popupUniqueCode').textContent = profile.pass_code;
+        document.getElementById('popupFingerprint').textContent = profile.visitor_fingerprint;
+        document.getElementById('popupSubmittedAt').textContent = profile.submitted_at_wita || '-';
+        document.getElementById('popupVerifiedAt').textContent = profile.verified_at_wita || '-';
+
+        const scanBadge = document.getElementById('popupScanCountBadge');
+        scanBadge.textContent = isFirstVerification
+          ? 'BARU VERIFIED'
+          : `SCAN KE-${profile.check_in_count}`;
+
+        // Reset KTP drawer di dalam popup
+        currentKtpEndpoint = profile.ktp_image_endpoint;
+        document.getElementById('popupKtpBox').classList.remove('hidden');
+        document.getElementById('popupKtpImage').src = `${currentKtpEndpoint}?t=${Date.now()}`;
+
+        document.getElementById('profilePopupOverlay').classList.remove('hidden');
+      }
+
+      function openErrorPopup(message) {
+        isPopupOpen = true;
+        updateScannerPauseUi();
+
+        document.getElementById('popupCardTitle').textContent = 'Verifikasi Gagal';
+        const badgeEl = document.getElementById('popupVerifiedBadge');
+        badgeEl.classList.add('hidden');
+        badgeEl.classList.remove('inline-flex');
+
+        document.getElementById('popupSuccessContent').classList.add('hidden');
+        document.getElementById('popupErrorContent').classList.remove('hidden');
+        document.getElementById('popupErrorMessage').textContent = message;
+
+        document.getElementById('profilePopupOverlay').classList.remove('hidden');
+      }
+
+      function closePopupAndResumeScan() {
+        document.getElementById('profilePopupOverlay').classList.add('hidden');
+        document.getElementById('popupKtpBox').classList.add('hidden');
+        document.getElementById('popupKtpImage').src = '';
+        document.getElementById('manualPassInput').value = '';
+
+        isPopupOpen = false;
+        updateScannerPauseUi();
+      }
+
+      function updateScannerPauseUi() {
+        if (!videoStream) return;
+        if (isPopupOpen) {
+          pausedBannerEl.classList.remove('hidden');
+          statusBadgeEl.textContent = 'PAUSED';
+          statusBadgeEl.className = 'font-mono-code text-[10px] font-bold uppercase px-2 py-1 border border-black bg-neutral-200 text-black';
+        } else {
+          pausedBannerEl.classList.add('hidden');
+          statusBadgeEl.textContent = 'SCANNING';
+          statusBadgeEl.className = 'font-mono-code text-[10px] font-bold uppercase px-2 py-1 border border-black bg-black text-white';
+        }
+      }
+
+      // ======================================================================
+      // 6. VERIFY PASS API CALL
+      // ======================================================================
+      async function verifyPassCodeOrToken(rawInput) {
+        const cleaned = String(rawInput || '').trim();
+        if (!cleaned || isVerifying || isPopupOpen) return;
+
+        isVerifying = true;
+
+        try {
+          const res = await fetch('/api/admin/verify-pass', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ code_or_token: cleaned })
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            playScanBeep(false);
+            openErrorPopup(data.message || 'QR Pass tidak dapat diverifikasi.');
+            return;
+          }
+
+          playScanBeep(true);
+          openSuccessPopup(data.profile, data.is_first_verification);
+          loadVerificationLogs();
+        } catch {
+          playScanBeep(false);
+          openErrorPopup('Terjadi gangguan koneksi jaringan saat memverifikasi QR Pass.');
+        } finally {
+          isVerifying = false;
+        }
+      }
+
+      // ======================================================================
+      // 7. CAMERA SCANNER ENGINE
+      // ======================================================================
+      async function startCamera() {
+        unlockAudio();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          showToast('Kamera tidak tersedia pada browser ini. Gunakan input manual atau unggah gambar.', 'error');
+          return;
+        }
+
+        stopCamera();
+
+        try {
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 1280 }
+            },
+            audio: false
+          });
+
+          videoEl.srcObject = videoStream;
+          await videoEl.play();
+
+          placeholderEl.classList.add('hidden');
+          videoEl.classList.remove('hidden');
+          overlayEl.classList.remove('hidden');
+          btnToggleCamera.textContent = 'Matikan Kamera';
+          btnSwitchCamera.disabled = false;
+          updateScannerPauseUi();
+
+          startScanLoop();
+        } catch {
+          showToast('Izin kamera ditolak atau perangkat kamera tidak ditemukan.', 'error');
+        }
+      }
+
+      function stopCamera() {
+        if (scanAnimationFrame) {
+          cancelAnimationFrame(scanAnimationFrame);
+          scanAnimationFrame = null;
+        }
+        if (videoStream) {
+          videoStream.getTracks().forEach((track) => track.stop());
+          videoStream = null;
+        }
+        videoEl.srcObject = null;
+        videoEl.classList.add('hidden');
+        overlayEl.classList.add('hidden');
+        pausedBannerEl.classList.add('hidden');
+        placeholderEl.classList.remove('hidden');
+        statusBadgeEl.textContent = 'STANDBY';
+        statusBadgeEl.className = 'font-mono-code text-[10px] font-bold uppercase px-2 py-1 border border-black bg-white text-black';
+        btnToggleCamera.textContent = 'Aktifkan Kamera';
+        btnSwitchCamera.disabled = true;
+      }
+
+      function startScanLoop() {
+        const hasNativeDetector = 'BarcodeDetector' in window;
+        let nativeDetector = null;
+        if (hasNativeDetector) {
+          try {
+            nativeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          } catch {
+            nativeDetector = null;
+          }
+        }
+
+        const tick = async () => {
+          if (!videoStream) return;
+
+          // Hanya pindai jika tidak sedang verifikasi API dan Popup Card sedang tertutup
+          if (!isVerifying && !isPopupOpen && videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+            const width = videoEl.videoWidth;
+            const height = videoEl.videoHeight;
+
+            if (width > 0 && height > 0) {
+              if (nativeDetector) {
+                try {
+                  const barcodes = await nativeDetector.detect(videoEl);
+                  if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                    verifyPassCodeOrToken(barcodes[0].rawValue);
+                  }
+                } catch {
+                  nativeDetector = null;
+                }
+              } else if (typeof window.jsQR === 'function') {
+                canvasEl.width = width;
+                canvasEl.height = height;
+                canvasCtx.drawImage(videoEl, 0, 0, width, height);
+                const imgData = canvasCtx.getImageData(0, 0, width, height);
+                const decoded = window.jsQR(imgData.data, width, height, {
+                  inversionAttempts: 'dontInvert'
+                });
+                if (decoded && decoded.data) {
+                  verifyPassCodeOrToken(decoded.data);
+                }
+              }
+            }
+          }
+
+          scanAnimationFrame = requestAnimationFrame(tick);
+        };
+
+        scanAnimationFrame = requestAnimationFrame(tick);
+      }
+
+      // ======================================================================
+      // 8. RECENT VERIFICATION LOGS (MOBILE CARDS + DESKTOP TABLE)
+      // ======================================================================
+      async function loadVerificationLogs() {
+        try {
+          const res = await fetch('/api/admin/verifications?limit=12', { credentials: 'same-origin' });
+          if (!res.ok) return;
+          const json = await res.json();
+
+          const mobileContainer = document.getElementById('verificationLogsMobile');
+          const desktopBody = document.getElementById('verificationLogsDesktop');
+
+          if (!json.data || json.data.length === 0) {
+            mobileContainer.innerHTML = `
+              <div class="p-6 text-center font-mono-code text-xs text-neutral-500">
+                Belum ada riwayat pemindaian QR Pass.
+              </div>`;
+            desktopBody.innerHTML = `
+              <tr>
+                <td colspan="6" class="py-6 px-4 text-center text-neutral-500 font-mono-code">
+                  Belum ada riwayat pemindaian QR Pass.
+                </td>
+              </tr>`;
+            return;
+          }
+
+          // Render Mobile List
+          mobileContainer.innerHTML = json.data
+            .map(
+              (item) => `
+              <div class="p-4 space-y-1.5">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono-code text-xs font-extrabold">${escapeHtml(item.pass_code)}</span>
+                  <span class="font-mono-code text-[10px] font-bold uppercase px-2 py-0.5 ${
+                    item.action_type === 'verified'
+                      ? 'bg-black text-white'
+                      : 'border border-black text-black'
+                  }">
+                    ${item.action_type === 'verified' ? 'VERIFIED' : `SCAN #${item.check_in_count}`}
+                  </span>
+                </div>
+                <div class="text-sm font-bold">${escapeHtml(item.full_name)}</div>
+                <div class="text-xs text-neutral-600">${escapeHtml(item.event_name)}</div>
+                <div class="flex items-center justify-between pt-1 font-mono-code text-[11px] text-neutral-500">
+                  <span>+${escapeHtml(item.whatsapp_number)}</span>
+                  <span>${escapeHtml(item.scanned_at_wita)}</span>
+                </div>
+              </div>`
+            )
+            .join('');
+
+          // Render Desktop Table
+          desktopBody.innerHTML = json.data
+            .map(
+              (item) => `
+              <tr class="hover:bg-neutral-50">
+                <td class="py-3 px-4 font-mono-code whitespace-nowrap">${escapeHtml(item.scanned_at_wita)}</td>
+                <td class="py-3 px-4 font-mono-code font-bold whitespace-nowrap">${escapeHtml(item.pass_code)}</td>
+                <td class="py-3 px-4 font-semibold">${escapeHtml(item.full_name)}</td>
+                <td class="py-3 px-4 text-neutral-700">${escapeHtml(item.event_name)}</td>
+                <td class="py-3 px-4 font-mono-code">+${escapeHtml(item.whatsapp_number)}</td>
+                <td class="py-3 px-4">
+                  <span class="inline-block font-mono-code text-[10px] font-bold uppercase px-2 py-0.5 ${
+                    item.action_type === 'verified'
+                      ? 'bg-black text-white'
+                      : 'border border-black text-black'
+                  }">
+                    ${item.action_type === 'verified' ? 'VERIFIED' : `RE-SCAN (#${item.check_in_count})`}
+                  </span>
+                </td>
+              </tr>`
+            )
+            .join('');
+        } catch {
+          // Abaikan error log non-kritis
+        }
+      }
+
+      // ======================================================================
+      // 9. EVENT LISTENERS
+      // ======================================================================
+      document.getElementById('btnTestBeep').addEventListener('click', () => {
+        playScanBeep(true);
+        showToast('Suara bip aktif.');
+      });
+
+      btnToggleCamera.addEventListener('click', () => {
+        if (videoStream) {
+          stopCamera();
+        } else {
+          startCamera();
+        }
+      });
+
+      btnSwitchCamera.addEventListener('click', () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        if (videoStream) {
+          startCamera();
+        }
+      });
+
+      document.getElementById('inputQrImageFile').addEventListener('change', (e) => {
+        unlockAudio();
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            canvasEl.width = img.width;
+            canvasEl.height = img.height;
+            canvasCtx.drawImage(img, 0, 0, img.width, img.height);
+            const imgData = canvasCtx.getImageData(0, 0, img.width, img.height);
+            if (typeof window.jsQR === 'function') {
+              const decoded = window.jsQR(imgData.data, img.width, img.height);
+              if (decoded && decoded.data) {
+                verifyPassCodeOrToken(decoded.data);
+              } else {
+                playScanBeep(false);
+                showToast('QR Code tidak terbaca dari gambar tersebut.', 'error');
+              }
+            }
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+      });
+
+      document.getElementById('manualVerifyForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        unlockAudio();
+        const val = document.getElementById('manualPassInput').value.trim();
+        if (!val) {
+          showToast('Masukkan Unique Code terlebih dahulu.', 'error');
+          return;
+        }
+        verifyPassCodeOrToken(val);
+      });
+
+      // Mandatory Close Button on Popup Card
+      document.getElementById('btnClosePopupCard').addEventListener('click', closePopupAndResumeScan);
+
+      document.getElementById('btnCopyUniqueCode').addEventListener('click', async () => {
+        const code = document.getElementById('popupUniqueCode').textContent.trim();
+        if (!code) return;
+        await navigator.clipboard.writeText(code);
+        showToast('Unique Code disalin.');
+      });
+
+      document.getElementById('btnCopyFingerprint').addEventListener('click', async () => {
+        const fp = document.getElementById('popupFingerprint').textContent.trim();
+        if (!fp || fp === '-') return;
+        await navigator.clipboard.writeText(fp);
+        showToast('Visitor Fingerprint disalin.');
+      });
+
+      document.getElementById('btnRefreshLogs').addEventListener('click', loadVerificationLogs);
+
+      async function handleLogout() {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': csrfToken },
+            credentials: 'same-origin'
+          });
+        } finally {
+          window.location.href = '/';
+        }
+      }
+
+      document.getElementById('btnLogoutDesktop').addEventListener('click', handleLogout);
+      document.getElementById('btnLogoutMobile').addEventListener('click', handleLogout);
+
+      window.addEventListener('beforeunload', stopCamera);
+
+      // Inisialisasi Halaman & Cek Query ?token=... (jika dibuka dari kamera bawaan HP)
+      (async () => {
+        await initAdminSession();
+        await loadVerificationLogs();
+
+        const params = new URLSearchParams(window.location.search);
+        const queryToken = params.get('token') || params.get('code');
+        if (queryToken) {
+          verifyPassCodeOrToken(queryToken);
+          window.history.replaceState({}, '', '/admin-scan');
+        }
+      })();
+    })();
+  </script>
+</body>
+</html>

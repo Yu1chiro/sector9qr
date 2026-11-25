@@ -3,1177 +3,646 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visitor Verification — Sector9 QR</title>
+  <title>Verifikasi Akses — Sector9 QR</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace']
-          }
-        }
-      }
-    };
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    html, body {
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
       background-color: #ffffff;
       color: #000000;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
     }
-    .editorial-grid-bg {
-      background-image: radial-gradient(#d4d4d4 1px, transparent 1px);
-      background-size: 24px 24px;
-    }
-    @keyframes toastSlideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    .toast-enter {
-      animation: toastSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-    @keyframes skeletonPulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    .skeleton-box {
-      animation: skeletonPulse 1.4s ease-in-out infinite;
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col justify-between editorial-grid-bg text-black selection:bg-black selection:text-white">
+<body class="min-h-screen bg-white text-black antialiased flex flex-col justify-between">
 
-  <!-- Toast Notification Container -->
-  <div id="toast-container" aria-live="polite" class="fixed top-4 right-4 z-50 flex flex-col gap-2.5 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"></div>
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
 
-  <!-- Top Minimalist Header -->
-  <header class="w-full bg-white border-b border-black">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+  <!-- Minimal Header -->
+  <header class="border-b border-black bg-white">
+    <div class="max-w-xl mx-auto px-4 py-4 flex items-center justify-between">
       <div class="flex items-center gap-2.5">
-        <span class="inline-flex items-center justify-center w-7 h-7 bg-black text-white font-mono text-xs font-semibold tracking-tighter">
+        <div class="w-7 h-7 bg-black text-white flex items-center justify-center font-mono-code text-xs font-bold">
           S9
-        </span>
-        <div>
-          <span class="font-bold text-sm tracking-tight uppercase">Sector9 QR</span>
-          <span class="hidden sm:inline font-mono text-[10px] text-neutral-500 uppercase tracking-widest ml-2">
-            // Visitor Gate
-          </span>
         </div>
+        <span class="font-bold tracking-tight text-sm uppercase">Sector9 QR</span>
       </div>
-
-      <div class="flex items-center gap-2 px-2.5 py-1 border border-neutral-300 bg-neutral-50 font-mono text-[11px] text-neutral-700">
-        <span class="inline-block w-1.5 h-1.5 bg-black"></span>
-        <span id="wita-clock">--:--:-- WITA</span>
-      </div>
+      <span class="font-mono-code text-[11px] uppercase tracking-widest text-neutral-500">
+        IDENTITY GATE
+      </span>
     </div>
   </header>
 
-  <!-- Main Mobile-First Container -->
-  <main class="flex-1 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
-    <div class="w-full max-w-lg">
+  <!-- Main Container -->
+  <main class="max-w-xl w-full mx-auto px-4 py-8 flex-1">
 
-      <!-- ================================================================== -->
-      <!-- STATE 1: LOADING SKELETON                                          -->
-      <!-- ================================================================== -->
-      <section id="view-loading" aria-label="Memverifikasi QR Code" class="bg-white border border-black p-6 sm:p-8 space-y-5">
-        <div class="flex items-center justify-between border-b border-neutral-200 pb-4 skeleton-box">
-          <div class="h-3.5 w-32 bg-neutral-200"></div>
-          <div class="h-4 w-16 bg-neutral-300"></div>
-        </div>
-        <div class="space-y-3 skeleton-box">
-          <div class="h-7 w-3/4 bg-neutral-200"></div>
-          <div class="h-4 w-full bg-neutral-100"></div>
-          <div class="h-4 w-2/3 bg-neutral-100"></div>
-        </div>
-        <div class="pt-2 space-y-3 skeleton-box">
-          <div class="h-11 w-full bg-neutral-100 border border-neutral-200"></div>
-          <div class="h-11 w-full bg-neutral-100 border border-neutral-200"></div>
-          <div class="h-12 w-full bg-neutral-300"></div>
-        </div>
-        <div class="font-mono text-[11px] text-neutral-500 text-center pt-1">
-          MEMVALIDASI AKSES &amp; KUOTA QR CODE...
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 2: ACCESS DENIED (KUOTA PENUH / LIMIT REACHED)               -->
-      <!-- ================================================================== -->
-      <section id="view-limit-reached" role="alert" class="hidden bg-white border border-black">
-        <div class="bg-black text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>STATUS // 403 QUOTA FULL</span>
-          <span>アクセス拒否</span>
-        </div>
-
-        <div class="p-6 sm:p-8 space-y-5">
-          <div class="inline-block font-mono text-xs uppercase tracking-widest border border-black px-2.5 py-1 bg-neutral-100 font-semibold">
-            LIMIT REACHED
-          </div>
-
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-black">
-            Access Denied
-          </h1>
-
-          <p class="text-sm sm:text-base text-neutral-800 leading-relaxed font-medium">
-            Maaf, kuota akses untuk QR Code ini telah mencapai batas maksimal.
-          </p>
-
-          <div id="limit-qr-meta" class="hidden border-t border-b border-neutral-200 py-3.5 font-mono text-xs space-y-1.5 text-neutral-600">
-            <div class="flex justify-between gap-2">
-              <span>QR CODE:</span>
-              <span id="limit-qr-name" class="text-black font-semibold text-right"></span>
-            </div>
-            <div class="flex justify-between gap-2">
-              <span>KUOTA TERPAKAI:</span>
-              <span id="limit-qr-quota" class="text-black font-semibold"></span>
-            </div>
-          </div>
-
-          <p class="text-xs text-neutral-500 leading-relaxed">
-            Setiap QR Code memiliki batas jumlah pengunjung unik. Silakan hubungi penyelenggara atau administrator apabila Anda memerlukan akses tambahan.
-          </p>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 3: EXPIRED QR CODE                                           -->
-      <!-- ================================================================== -->
-      <section id="view-expired" role="alert" class="hidden bg-white border border-black">
-        <div class="bg-neutral-900 text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>STATUS // EXPIRED</span>
-          <span>有効期限切れ</span>
-        </div>
-
-        <div class="p-6 sm:p-8 space-y-5">
-          <div class="inline-block font-mono text-xs uppercase tracking-widest border border-dashed border-black px-2.5 py-1 text-neutral-700">
-            EXPIRED ENDPOINT
-          </div>
-
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-black">
-            QR Code Kedaluwarsa
-          </h1>
-
-          <p class="text-sm text-neutral-700 leading-relaxed">
-            Masa berlaku QR Code ini telah berakhir sehingga tidak lagi dapat digunakan untuk mengakses halaman tujuan.
-          </p>
-
-          <div id="expired-qr-meta" class="hidden border-t border-b border-neutral-200 py-3.5 font-mono text-xs space-y-1.5 text-neutral-600">
-            <div class="flex justify-between gap-2">
-              <span>QR CODE:</span>
-              <span id="expired-qr-name" class="text-black font-semibold text-right"></span>
-            </div>
-            <div class="flex justify-between gap-2">
-              <span>BERAKHIR PADA:</span>
-              <span id="expired-qr-date" class="text-black font-semibold"></span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 4: DISABLED QR CODE                                          -->
-      <!-- ================================================================== -->
-      <section id="view-disabled" role="alert" class="hidden bg-white border border-black">
-        <div class="bg-neutral-800 text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>STATUS // DISABLED</span>
-          <span>無効化</span>
-        </div>
-
-        <div class="p-6 sm:p-8 space-y-4">
-          <div class="inline-block font-mono text-xs uppercase tracking-widest border border-neutral-400 bg-neutral-100 px-2.5 py-1 text-neutral-700">
-            INACTIVE
-          </div>
-
-          <h1 class="text-2xl font-bold tracking-tight text-black">
-            QR Code Dinonaktifkan
-          </h1>
-
-          <p class="text-sm text-neutral-700 leading-relaxed">
-            Akses ke QR Code <strong id="disabled-qr-name" class="text-black">ini</strong> sedang dinonaktifkan sementara oleh administrator. Silakan coba kembali beberapa saat lagi.
-          </p>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 5: NOT FOUND / INVALID SLUG                                  -->
-      <!-- ================================================================== -->
-      <section id="view-not-found" role="alert" class="hidden bg-white border border-black">
-        <div class="bg-black text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>ERROR // 404 NOT FOUND</span>
-          <span>無効なQR</span>
-        </div>
-
-        <div class="p-6 sm:p-8 space-y-4">
-          <h1 class="text-2xl font-bold tracking-tight text-black">
-            QR Code Tidak Ditemukan
-          </h1>
-
-          <p id="not-found-message" class="text-sm text-neutral-700 leading-relaxed">
-            Tautan QR Code tidak valid, tidak lengkap, atau telah dihapus dari sistem Sector9 QR. Pastikan Anda memindai QR Code resmi.
-          </p>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 6: PIN VERIFICATION GATE                                     -->
-      <!-- ================================================================== -->
-      <section id="view-pin-gate" class="hidden bg-white border border-black">
-        <div class="bg-black text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>SECURITY // PIN REQUIRED</span>
-          <span>暗証番号</span>
-        </div>
-
-        <div class="p-6 sm:p-8">
-          <!-- QR Header Identity -->
-          <div class="flex items-center gap-3.5 pb-5 mb-5 border-b border-neutral-200">
-            <div id="pin-logo-box" class="hidden w-12 h-12 border border-black bg-white p-1 flex items-center justify-center shrink-0">
-              <img id="pin-logo-img" src="" alt="Brand Logo" class="max-w-full max-h-full object-contain" />
-            </div>
-            <div class="min-w-0">
-              <div class="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                PROTECTED ENDPOINT
-              </div>
-              <h1 id="pin-qr-name" class="text-lg sm:text-xl font-bold tracking-tight text-black truncate">
-                QR Code Terproteksi
-              </h1>
-            </div>
-          </div>
-
-          <p class="text-xs sm:text-sm text-neutral-600 leading-relaxed mb-5">
-            QR Code ini dilindungi oleh kode PIN keamanan. Masukkan <strong>4 hingga 8 digit PIN</strong> yang diberikan penyelenggara untuk melanjutkan.
-          </p>
-
-          <!-- Inline PIN Error -->
-          <div id="pin-error-banner" role="alert" class="hidden mb-4 border border-black bg-neutral-100 p-3 flex items-center gap-2.5">
-            <span class="font-mono text-[10px] font-bold bg-black text-white px-1.5 py-0.5 shrink-0">ERR</span>
-            <span id="pin-error-text" class="text-xs font-medium text-black"></span>
-          </div>
-
-          <form id="pin-form" novalidate class="space-y-4">
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="pin-input" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
-                  Kode PIN Akses *
-                </label>
-                <span class="font-mono text-[10px] text-neutral-400">4–8 DIGIT</span>
-              </div>
-              <div class="relative flex items-stretch">
-                <input
-                  type="password"
-                  id="pin-input"
-                  inputmode="numeric"
-                  pattern="[0-9]{4,8}"
-                  maxlength="8"
-                  autocomplete="one-time-code"
-                  placeholder="••••••"
-                  required
-                  class="w-full h-12 pl-4 pr-20 text-lg font-mono tracking-[0.35em] bg-white text-black border border-black rounded-none placeholder:text-neutral-300 placeholder:tracking-widest focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
-                />
-                <button
-                  type="button"
-                  id="toggle-pin-btn"
-                  class="absolute right-0 top-0 bottom-0 px-3.5 font-mono text-[11px] uppercase tracking-wider text-neutral-600 hover:text-black border-l border-neutral-300 bg-neutral-50 hover:bg-neutral-100 transition-colors cursor-pointer"
-                >
-                  Show
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              id="verify-pin-btn"
-              class="w-full h-12 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest font-semibold hover:bg-neutral-800 disabled:bg-neutral-300 disabled:border-neutral-300 disabled:text-neutral-600 transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
-            >
-              <span id="verify-pin-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              <span id="verify-pin-label">Verifikasi PIN &rarr;</span>
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 7: VISITOR IDENTITY SUBMISSION FORM                          -->
-      <!-- ================================================================== -->
-      <section id="view-identity-form" class="hidden bg-white border border-black">
-        <!-- Editorial Card Style Banner (Shown if QR style_type === 'card') -->
-        <div id="form-card-style-banner" class="hidden bg-black text-white px-5 py-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest">
-          <span>SECTOR9 QR // OFFICIAL ACCESS PASS</span>
-          <span>VERIFIED GATE</span>
-        </div>
-
-        <div class="p-6 sm:p-8">
-          <!-- QR Branding Header -->
-          <div class="flex items-center gap-3.5 pb-5 mb-5 border-b border-black">
-            <div id="form-logo-box" class="hidden w-12 h-12 border border-black bg-white p-1 flex items-center justify-center shrink-0">
-              <img id="form-logo-img" src="" alt="Logo Brand" class="max-w-full max-h-full object-contain" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                  IDENTITY VERIFICATION
-                </span>
-                <span class="font-mono text-[10px] px-1.5 py-0.5 border border-black bg-neutral-100 text-black shrink-0">
-                  STEP 1/1
-                </span>
-              </div>
-              <h1 id="form-qr-name" class="text-lg sm:text-xl font-bold tracking-tight text-black truncate mt-0.5">
-                Verifikasi Pengunjung
-              </h1>
-              <div id="form-qr-expiry" class="font-mono text-[11px] text-neutral-500 mt-0.5">
-                Berlaku s/d: --
-              </div>
-            </div>
-          </div>
-
-          <p class="text-xs sm:text-sm text-neutral-600 leading-relaxed mb-5">
-            Lengkapi data identitas dan unggah foto KTP Anda di bawah ini untuk melanjutkan ke halaman tujuan.
-          </p>
-
-          <!-- Inline Form Error Banner -->
-          <div id="identity-error-banner" role="alert" class="hidden mb-5 border border-black bg-neutral-100 p-3.5 flex items-start justify-between gap-2.5">
-            <div class="flex items-start gap-2.5">
-              <span class="font-mono text-[10px] font-bold bg-black text-white px-1.5 py-0.5 mt-0.5 shrink-0">ERR</span>
-              <span id="identity-error-text" class="text-xs font-medium text-black leading-snug"></span>
-            </div>
-            <button type="button" id="dismiss-identity-err-btn" class="font-mono text-xs text-neutral-500 hover:text-black cursor-pointer">
-              ✕
-            </button>
-          </div>
-
-          <!-- Visitor Identity Form -->
-          <form id="identity-form" novalidate class="space-y-5">
-
-            <!-- Field 1: Nama Lengkap -->
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="full-name" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
-                  1. Nama Lengkap Sesuai KTP *
-                </label>
-                <span class="font-mono text-[10px] text-neutral-400">WAJIB</span>
-              </div>
-              <input
-                type="text"
-                id="full-name"
-                name="full_name"
-                autocomplete="name"
-                maxlength="150"
-                placeholder="Contoh: I Made Wijaya"
-                required
-                class="w-full h-11 px-3.5 text-sm bg-white text-black border border-black rounded-none placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
-              />
-              <p id="err-full-name" class="hidden mt-1 font-mono text-[11px] text-black"></p>
-            </div>
-
-            <!-- Field 2: WhatsApp Aktif (Format 6281xxxxxxxx) -->
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="whatsapp-number" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
-                  2. Nomor WhatsApp Aktif *
-                </label>
-                <span class="font-mono text-[10px] text-neutral-400">KODE NEGARA: +62</span>
-              </div>
-              <div class="flex items-stretch">
-                <span class="inline-flex items-center h-11 px-3.5 font-mono text-sm font-semibold bg-black text-white border border-black select-none">+62</span>
-                <input
-                  type="tel"
-                  id="whatsapp-number"
-                  name="whatsapp_number"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  maxlength="13"
-                  placeholder="81234567890"
-                  required
-                  class="flex-1 min-w-0 h-11 px-3.5 text-sm font-mono bg-white text-black border border-black border-l-0 rounded-none placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-1"
-                />
-              </div>
-              <p class="mt-1 font-mono text-[10px] text-neutral-500">
-                Kode negara <strong>+62</strong> sudah terisi otomatis. Cukup isi sisanya (contoh: 81234567890).
-              </p>
-              <p id="err-whatsapp" class="hidden mt-1 font-mono text-[11px] text-black"></p>
-            </div>
-
-            <!-- Field 3: Upload Foto KTP -->
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="ktp-file-input" class="font-mono text-xs uppercase tracking-wider font-medium text-black">
-                  3. Upload Foto KTP *
-                </label>
-                <span class="font-mono text-[10px] text-neutral-400">JPG/PNG/WEBP MAX 5MB</span>
-              </div>
-
-              <!-- Upload Drop/Select Box -->
-              <div id="ktp-upload-box" class="border border-black bg-neutral-50 p-4 transition-colors">
-                <input
-                  type="file"
-                  id="ktp-file-input"
-                  accept="image/jpeg,image/png,image/webp"
-                  class="sr-only"
-                />
-
-                <!-- Empty Picker State -->
-                <div id="ktp-empty-picker" class="text-center py-3 space-y-2.5">
-                  <div class="inline-block font-mono text-[11px] uppercase tracking-wider border border-black bg-white px-3 py-1.5">
-                    DOKUMEN IDENTITAS (KTP)
-                  </div>
-                  <p class="text-xs text-neutral-600 max-w-xs mx-auto leading-relaxed">
-                    Pastikan foto KTP terlihat jelas, tidak buram, dan seluruh sudut kartu terbaca.
-                  </p>
-                  <div class="pt-1">
-                    <button
-                      type="button"
-                      id="select-ktp-btn"
-                      class="px-4 py-2 bg-white text-black border border-black font-mono text-xs uppercase tracking-wider font-medium hover:bg-black hover:text-white transition-colors cursor-pointer"
-                    >
-                      Pilih / Ambil Foto KTP
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Selected KTP Preview State -->
-                <div id="ktp-preview-container" class="hidden space-y-3">
-                  <div class="border border-black bg-white p-2 flex items-center justify-center max-h-56 overflow-hidden">
-                    <img id="ktp-preview-img" src="" alt="Preview Foto KTP" class="max-h-52 w-auto object-contain block" />
-                  </div>
-                  <div class="flex items-center justify-between gap-2 font-mono text-[11px]">
-                    <span id="ktp-file-meta" class="truncate text-neutral-700">ktp.jpg</span>
-                    <button
-                      type="button"
-                      id="change-ktp-btn"
-                      class="shrink-0 px-2.5 py-1 border border-black bg-white text-black text-[10px] uppercase tracking-wider hover:bg-black hover:text-white transition-colors cursor-pointer"
-                    >
-                      Ganti Foto
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <p id="err-ktp" class="hidden mt-1 font-mono text-[11px] text-black"></p>
-            </div>
-
-            <!-- Privacy & Security Notice -->
-            <div class="border-l-2 border-black pl-3 py-0.5 text-[11px] text-neutral-600 leading-relaxed">
-              Dokumen KTP Anda dienkripsi saat transmisi dan disimpan pada penyimpanan privat yang hanya dapat diakses oleh administrator berwenang.
-            </div>
-
-            <!-- Submit Button -->
-            <div class="pt-1">
-              <button
-                type="submit"
-                id="submit-identity-btn"
-                class="w-full h-12 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest font-semibold hover:bg-neutral-800 disabled:bg-neutral-300 disabled:border-neutral-300 disabled:text-neutral-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
-              >
-                <span id="submit-identity-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                <span id="submit-identity-label">Kirim Data &amp; Lanjutkan</span>
-                <span id="submit-identity-arrow" aria-hidden="true">&rarr;</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <!-- ================================================================== -->
-      <!-- STATE 8: SUBMISSION SUCCESS & DESTINATION REDIRECT                 -->
-      <!-- ================================================================== -->
-      <section id="view-success" class="hidden bg-white border border-black">
-        <div class="bg-black text-white px-5 py-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-widest">
-          <span>STATUS // VERIFIED</span>
-          <span>認証完了</span>
-        </div>
-
-        <div class="p-6 sm:p-8 space-y-6">
-          <div>
-            <div class="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest bg-black text-white px-2.5 py-1 mb-3">
-              <span class="w-1.5 h-1.5 bg-white inline-block"></span>
-              DATA TERSIMPAN
-            </div>
-
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-black">
-              Verifikasi Berhasil
-            </h1>
-
-            <p class="text-sm text-neutral-600 mt-2 leading-relaxed">
-              Identitas dan dokumen KTP Anda telah tercatat di sistem. Silakan lanjutkan ke halaman tujuan melalui tombol di bawah ini.
-            </p>
-          </div>
-
-          <!-- Submission Receipt Details -->
-          <dl class="border-y border-black divide-y divide-neutral-200 font-mono text-xs">
-            <div class="py-2.5 flex items-center justify-between gap-3">
-              <dt class="text-neutral-500">NAMA</dt>
-              <dd id="success-user-name" class="text-black font-semibold text-right truncate"></dd>
-            </div>
-            <div class="py-2.5 flex items-center justify-between gap-3">
-              <dt class="text-neutral-500">WHATSAPP</dt>
-              <dd id="success-user-wa" class="text-black font-medium text-right"></dd>
-            </div>
-            <div class="py-2.5 flex items-center justify-between gap-3">
-              <dt class="text-neutral-500">QR ENDPOINT</dt>
-              <dd id="success-qr-name" class="text-black font-medium text-right truncate"></dd>
-            </div>
-            <div class="py-2.5 flex items-center justify-between gap-3">
-              <dt class="text-neutral-500">WAKTU SUBMIT</dt>
-              <dd id="success-submitted-at" class="text-black font-medium text-right"></dd>
-            </div>
-          </dl>
-
-          <!-- Destination Link CTA -->
-          <div class="space-y-3">
-            <a
-              id="destination-link-btn"
-              href="#"
-              rel="noopener noreferrer"
-              class="w-full h-12 bg-black text-white border border-black font-mono text-xs uppercase tracking-widest font-semibold hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2.5"
-            >
-              <span>Lanjutkan ke Link Tujuan</span>
-              <span>&rarr;</span>
-            </a>
-
-            <div class="flex items-center justify-between font-mono text-[11px] text-neutral-500">
-              <span id="auto-redirect-text">Mengalihkan otomatis dalam 5 detik...</span>
-              <button
-                type="button"
-                id="cancel-auto-redirect-btn"
-                class="underline text-black hover:text-neutral-600 cursor-pointer"
-              >
-                Tahan Halaman
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
+    <!-- Loading State -->
+    <div id="stateLoading" class="border border-black p-10 text-center">
+      <div class="font-mono-code text-xs uppercase tracking-widest animate-pulse">
+        Memvalidasi Akses QR Code...
+      </div>
     </div>
+
+    <!-- Invalid / Expired / Limit Reached State -->
+    <div id="stateBlocked" class="hidden border border-black p-8 text-center">
+      <div id="blockedBadge" class="inline-block font-mono-code text-xs font-bold uppercase tracking-widest bg-black text-white px-3 py-1 mb-4">
+        ACCESS UNAVAILABLE
+      </div>
+      <h1 id="blockedTitle" class="text-xl font-extrabold uppercase tracking-tight mb-2">
+        QR Code Tidak Tersedia
+      </h1>
+      <p id="blockedMessage" class="text-sm text-neutral-600 leading-relaxed"></p>
+    </div>
+
+    <!-- PIN Verification State -->
+    <div id="statePin" class="hidden border border-black bg-white">
+      <div class="border-b border-black px-6 py-4 bg-neutral-50">
+        <div class="font-mono-code text-[11px] uppercase tracking-widest text-neutral-500">
+          PROTECTED QR ACCESS
+        </div>
+        <h1 id="pinQrName" class="text-lg font-extrabold uppercase tracking-tight mt-0.5">
+          Masukkan PIN Akses
+        </h1>
+      </div>
+      <form id="pinForm" class="p-6 space-y-4">
+        <p class="text-xs text-neutral-600 leading-relaxed">
+          QR Code ini dilindungi PIN keamanan. Masukkan 4–8 digit PIN untuk melanjutkan ke formulir registrasi.
+        </p>
+        <div>
+          <label for="inputPin" class="block font-mono-code text-[11px] uppercase tracking-wider mb-1.5">
+            PIN Keamanan
+          </label>
+          <input
+            id="inputPin"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]{4,8}"
+            maxlength="8"
+            required
+            placeholder="••••••"
+            class="w-full px-4 py-3 border border-black font-mono-code text-center text-lg tracking-[0.4em] focus:outline-none focus:bg-neutral-50"
+          />
+        </div>
+        <button
+          type="submit"
+          id="btnSubmitPin"
+          class="w-full py-3 bg-black text-white text-xs font-bold uppercase tracking-widest border border-black hover:bg-neutral-800 transition-colors cursor-pointer"
+        >
+          Verifikasi PIN
+        </button>
+      </form>
+    </div>
+
+    <!-- Registration Form State -->
+    <div id="stateForm" class="hidden border border-black bg-white">
+      <div class="border-b border-black px-6 py-5 bg-neutral-50 flex items-center gap-4">
+        <img id="formQrLogo" src="" alt="Logo" class="hidden w-12 h-12 object-cover border border-black bg-white" />
+        <div class="min-w-0 flex-1">
+          <div class="font-mono-code text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+            FORMULIR REGISTRASI PESERTA
+          </div>
+          <h1 id="formQrName" class="text-lg sm:text-xl font-extrabold uppercase tracking-tight truncate">
+            -
+          </h1>
+          <div id="formQuotaMeta" class="font-mono-code text-[11px] text-neutral-600 mt-0.5">
+            -
+          </div>
+        </div>
+      </div>
+
+      <form id="identityForm" class="p-6 space-y-5">
+        <div>
+          <label for="inputFullName" class="block font-mono-code text-[11px] uppercase tracking-wider mb-1.5">
+            Nama Lengkap (Sesuai KTP) *
+          </label>
+          <input
+            id="inputFullName"
+            type="text"
+            minlength="2"
+            maxlength="150"
+            required
+            placeholder="Contoh: I Made Wirawan"
+            class="w-full px-3.5 py-2.5 border border-black text-sm focus:outline-none focus:bg-neutral-50"
+          />
+        </div>
+
+        <div>
+          <label for="inputWhatsapp" class="block font-mono-code text-[11px] uppercase tracking-wider mb-1.5">
+            Nomor WhatsApp Aktif (Format 628...) *
+          </label>
+          <input
+            id="inputWhatsapp"
+            type="tel"
+            inputmode="numeric"
+            required
+            placeholder="6281234567890"
+            class="w-full px-3.5 py-2.5 border border-black font-mono-code text-sm focus:outline-none focus:bg-neutral-50"
+          />
+          <p class="font-mono-code text-[11px] text-neutral-500 mt-1">
+            Awali dengan kode negara 62 (tanpa tanda + atau spasi).
+          </p>
+        </div>
+
+        <div>
+          <label class="block font-mono-code text-[11px] uppercase tracking-wider mb-1.5">
+            Unggah Foto KTP (JPG / PNG / WEBP) *
+          </label>
+          <label
+            for="inputKtpFile"
+            class="block border border-dashed border-black p-4 text-center hover:bg-neutral-50 transition-colors cursor-pointer"
+          >
+            <div id="ktpUploadPrompt" class="space-y-1">
+              <div class="text-xs font-bold uppercase tracking-wider">
+                Pilih atau Ambil Foto KTP
+              </div>
+              <div class="font-mono-code text-[11px] text-neutral-500">
+                Maksimal 5 MB • Gambar dikompresi otomatis
+              </div>
+            </div>
+            <img id="ktpPreviewImg" src="" alt="Preview KTP" class="hidden max-h-48 mx-auto object-contain border border-neutral-300" />
+          </label>
+          <input
+            id="inputKtpFile"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            class="hidden"
+          />
+        </div>
+
+        <button
+          type="submit"
+          id="btnSubmitIdentity"
+          class="w-full py-3.5 bg-black text-white text-xs font-bold uppercase tracking-widest border border-black hover:bg-neutral-800 transition-colors cursor-pointer"
+        >
+          Kirim Data &amp; Dapatkan QR Pass
+        </button>
+      </form>
+    </div>
+
+    <!-- User Digital QR Pass State (After Submit) -->
+    <div id="statePass" class="hidden border-2 border-black bg-white shadow-[8px_8px_0px_0px_#000000]">
+      <div class="bg-black text-white px-6 py-4 flex items-center justify-between">
+        <span class="font-mono-code text-xs font-bold uppercase tracking-widest">
+          DIGITAL ENTRY PASS
+        </span>
+        <span id="userPassStatusBadge" class="font-mono-code text-[11px] uppercase px-2.5 py-0.5 bg-white text-black font-bold">
+          REGISTERED
+        </span>
+      </div>
+
+      <div class="p-6 text-center space-y-5">
+        <div>
+          <div class="font-mono-code text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+            EVENT / PROGRAM
+          </div>
+          <h2 id="passEventName" class="text-lg font-extrabold uppercase tracking-tight mt-0.5">
+            -
+          </h2>
+        </div>
+
+        <!-- QR Image Frame -->
+        <div class="inline-block border-2 border-black p-3 bg-white">
+          <img id="passQrImage" src="" alt="User QR Pass" class="w-56 h-56 sm:w-64 sm:h-64 object-contain mx-auto" />
+        </div>
+
+        <div>
+          <div class="font-mono-code text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+            UNIQUE PASS ID
+          </div>
+          <div id="passUniqueCode" class="font-mono-code text-xl font-extrabold tracking-widest mt-0.5">
+            S9-00000000
+          </div>
+        </div>
+
+        <!-- Participant Summary Box -->
+        <div class="border border-black bg-neutral-50 p-4 text-left space-y-2.5 text-xs">
+          <div class="flex justify-between gap-2 border-b border-neutral-200 pb-2">
+            <span class="font-mono-code text-neutral-500 uppercase">Nama</span>
+            <span id="passFullName" class="font-bold text-right">-</span>
+          </div>
+          <div class="flex justify-between gap-2 border-b border-neutral-200 pb-2">
+            <span class="font-mono-code text-neutral-500 uppercase">WhatsApp</span>
+            <span id="passWhatsapp" class="font-mono-code font-bold text-right">-</span>
+          </div>
+          <div class="flex justify-between gap-2 border-b border-neutral-200 pb-2">
+            <span class="font-mono-code text-neutral-500 uppercase">Waktu Daftar</span>
+            <span id="passSubmittedAt" class="font-mono-code text-right">-</span>
+          </div>
+          <div>
+            <span class="block font-mono-code text-[10px] text-neutral-500 uppercase mb-1">Fingerprint</span>
+            <span id="passFingerprint" class="block font-mono-code text-[11px] break-all text-neutral-700">-</span>
+          </div>
+        </div>
+
+        <p class="text-xs text-neutral-600 leading-relaxed">
+          Tunjukkan QR Code ini kepada panitia / admin saat verifikasi di lokasi. Simpan gambar pass ke galeri ponsel Anda.
+        </p>
+
+        <div class="space-y-2.5 pt-1">
+          <button
+            id="btnDownloadPassCard"
+            type="button"
+            class="w-full py-3 bg-black text-white text-xs font-bold uppercase tracking-widest border border-black hover:bg-neutral-800 transition-colors cursor-pointer"
+          >
+            Unduh Kartu QR Pass (PNG)
+          </button>
+
+          <a
+            id="btnContinueDestination"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="hidden block w-full py-3 bg-white text-black text-xs font-bold uppercase tracking-widest border border-black hover:bg-neutral-100 transition-colors"
+          >
+            Lanjut ke Halaman Tujuan ↗
+          </a>
+        </div>
+      </div>
+    </div>
+
   </main>
 
-  <!-- Minimalist Footer -->
-  <footer class="w-full bg-white border-t border-neutral-200">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-1.5 font-mono text-[10px] text-neutral-500">
-      <span>SECTOR9 QR // SECURE VISITOR VERIFICATION</span>
-    </div>
+  <footer class="border-t border-neutral-200 py-4 text-center font-mono-code text-[11px] text-neutral-500">
+    SECTOR9 QR // VERIFIED IDENTITY SYSTEM
   </footer>
 
   <script>
     (function () {
       'use strict';
 
-      // ======================================================================
-      // STATE
-      // ======================================================================
-      const state = {
-        slug: '',
-        qrData: null,
-        ktpBase64: '',
-        redirectTimer: null,
-        redirectSecondsLeft: 5
-      };
+      const params = new URLSearchParams(window.location.search);
+      const slug = (params.get('qr') || '').trim();
+      const presetStatus = (params.get('status') || '').trim();
+      const storageKey = slug ? `s9_user_pass_${slug}` : '';
 
-      // ======================================================================
-      // 1. LIVE WITA CLOCK
-      // ======================================================================
-      const clockEl = document.getElementById('wita-clock');
-      function updateWitaClock() {
-        if (!clockEl) return;
-        try {
-          const formatted = new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Makassar',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-          }).format(new Date());
-          clockEl.textContent = formatted + ' WITA';
-        } catch {
-          clockEl.textContent = 'ASIA/MAKASSAR';
-        }
-      }
-      updateWitaClock();
-      setInterval(updateWitaClock, 1000);
+      let compressedKtpBase64 = '';
+      let currentPassData = null;
 
-      // ======================================================================
-      // 2. UTILITIES & TOAST NOTIFICATIONS
-      // ======================================================================
-      function escapeHtml(str) {
-        return String(str ?? '')
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#039;');
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto border border-black px-4 py-3 text-xs font-medium shadow-[4px_4px_0px_0px_#000] ${
+          type === 'error' ? 'bg-black text-white' : 'bg-white text-black'
+        }`;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
       }
 
-      const toastContainer = document.getElementById('toast-container');
-      function showToast(type, title, message, duration = 4200) {
-        if (!toastContainer) return;
-
-        const variants = {
-          success: { badge: 'OK', border: 'border-black', badgeBg: 'bg-black text-white' },
-          error: { badge: 'ERR', border: 'border-black', badgeBg: 'bg-black text-white' },
-          warning: { badge: 'WARN', border: 'border-black', badgeBg: 'bg-neutral-800 text-white' },
-          info: { badge: 'INFO', border: 'border-neutral-400', badgeBg: 'bg-neutral-200 text-black' }
-        };
-
-        const style = variants[type] || variants.info;
-        const toast = document.createElement('div');
-        toast.className = `toast-enter pointer-events-auto bg-white border ${style.border} p-3.5 flex items-start justify-between gap-3`;
-        toast.setAttribute('role', 'status');
-
-        toast.innerHTML = `
-          <div class="flex items-start gap-2.5 min-w-0">
-            <span class="font-mono text-[10px] font-semibold px-1.5 py-0.5 shrink-0 ${style.badgeBg}">
-              ${escapeHtml(style.badge)}
-            </span>
-            <div class="min-w-0">
-              <div class="text-xs font-semibold text-black tracking-tight">${escapeHtml(title)}</div>
-              <div class="text-xs text-neutral-600 mt-0.5 break-words leading-snug">${escapeHtml(message)}</div>
-            </div>
-          </div>
-          <button type="button" aria-label="Tutup notifikasi" class="font-mono text-xs text-neutral-400 hover:text-black shrink-0 cursor-pointer">
-            ✕
-          </button>
-        `;
-
-        const removeToast = () => {
-          if (toast.parentNode) toast.parentNode.removeChild(toast);
-        };
-
-        toast.querySelector('button').addEventListener('click', removeToast);
-        toastContainer.appendChild(toast);
-
-        if (duration > 0) {
-          setTimeout(removeToast, duration);
-        }
+      function hideAllStates() {
+        ['stateLoading', 'stateBlocked', 'statePin', 'stateForm', 'statePass'].forEach((id) => {
+          document.getElementById(id).classList.add('hidden');
+        });
       }
 
-      function isSafeHttpUrl(urlStr) {
-        try {
-          const u = new URL(urlStr);
-          return u.protocol === 'http:' || u.protocol === 'https:';
-        } catch {
-          return false;
-        }
+      function showBlocked(title, message, badge = 'ACCESS UNAVAILABLE') {
+        hideAllStates();
+        document.getElementById('blockedBadge').textContent = badge;
+        document.getElementById('blockedTitle').textContent = title;
+        document.getElementById('blockedMessage').textContent = message;
+        document.getElementById('stateBlocked').classList.remove('hidden');
       }
 
-      // ======================================================================
-      // 3. VIEW STATE CONTROLLER
-      // ======================================================================
-      const VIEW_IDS = [
-        'view-loading',
-        'view-limit-reached',
-        'view-expired',
-        'view-disabled',
-        'view-not-found',
-        'view-pin-gate',
-        'view-identity-form',
-        'view-success'
-      ];
+      function showPassCard(pass) {
+        currentPassData = pass;
+        hideAllStates();
 
-      function switchView(activeViewId) {
-        for (const id of VIEW_IDS) {
-          const el = document.getElementById(id);
-          if (el) {
-            if (id === activeViewId) {
-              el.classList.remove('hidden');
-            } else {
-              el.classList.add('hidden');
-            }
-          }
+        document.getElementById('passEventName').textContent = pass.qr_name;
+        document.getElementById('passQrImage').src = pass.pass_qr_data_url;
+        document.getElementById('passUniqueCode').textContent = pass.pass_code;
+        document.getElementById('passFullName').textContent = pass.full_name;
+        document.getElementById('passWhatsapp').textContent = `+${pass.whatsapp_number}`;
+        document.getElementById('passSubmittedAt').textContent = `${pass.submitted_at_wita} WITA`;
+        document.getElementById('passFingerprint').textContent = pass.visitor_fingerprint || '-';
+
+        const statusBadge = document.getElementById('userPassStatusBadge');
+        statusBadge.textContent = pass.status === 'verified' ? 'VERIFIED' : 'ACTIVE PASS';
+
+        const destBtn = document.getElementById('btnContinueDestination');
+        if (pass.destination_url) {
+          destBtn.href = pass.destination_url;
+          destBtn.classList.remove('hidden');
         }
+
+        document.getElementById('statePass').classList.remove('hidden');
       }
 
-      function populateQrBranding(qr) {
-        if (!qr) return;
+      async function compressImageToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+          reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Format gambar tidak valid.'));
+            img.onload = () => {
+              const maxDim = 1280;
+              let { width, height } = img;
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
 
-        // PIN Gate branding
-        document.getElementById('pin-qr-name').textContent = qr.name || 'QR Code Terproteksi';
-        if (qr.logo_url) {
-          document.getElementById('pin-logo-img').src = qr.logo_url;
-          document.getElementById('pin-logo-box').classList.remove('hidden');
-        } else {
-          document.getElementById('pin-logo-box').classList.add('hidden');
-        }
-
-        // Identity Form branding
-        document.getElementById('form-qr-name').textContent = qr.name || 'Verifikasi Pengunjung';
-        document.getElementById('form-qr-expiry').textContent = qr.expires_at_wita
-          ? `Berlaku s/d: ${qr.expires_at_wita} WITA`
-          : 'Sesi aktif';
-
-        if (qr.logo_url) {
-          document.getElementById('form-logo-img').src = qr.logo_url;
-          document.getElementById('form-logo-box').classList.remove('hidden');
-        } else {
-          document.getElementById('form-logo-box').classList.add('hidden');
-        }
-
-        const cardBanner = document.getElementById('form-card-style-banner');
-        if (qr.style_type === 'card') {
-          cardBanner.classList.remove('hidden');
-        } else {
-          cardBanner.classList.add('hidden');
-        }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
       }
 
-      // ======================================================================
-      // 4. INITIAL QR SCAN VERIFICATION (POST /api/public/scan)
-      // ======================================================================
-      async function verifyQrOnLoad() {
-        const params = new URLSearchParams(window.location.search);
-        const slug = (params.get('qr') || '').trim();
-        const urlStatus = (params.get('status') || '').trim();
+      // Render kartu PNG siap unduh ke galeri ponsel user
+      async function downloadPassAsPngCard() {
+        if (!currentPassData) return;
 
-        if (!slug || !/^[a-zA-Z0-9_-]{4,64}$/.test(slug)) {
-          switchView('view-not-found');
+        const qrImg = new Image();
+        qrImg.src = currentPassData.pass_qr_data_url;
+        await new Promise((resolve) => {
+          qrImg.onload = resolve;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 760;
+        canvas.height = 1040;
+        const ctx = canvas.getContext('2d');
+
+        // Background putih & border hitam tegas
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        ctx.strokeRect(24, 24, canvas.width - 48, canvas.height - 48);
+
+        // Header bar hitam
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(24, 24, canvas.width - 48, 84);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 24px monospace';
+        ctx.fillText('SECTOR9 QR // DIGITAL ENTRY PASS', 56, 75);
+
+        // Nama Event
+        ctx.fillStyle = '#666666';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('EVENT / PROGRAM', 56, 155);
+
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.fillText(String(currentPassData.qr_name).slice(0, 34), 56, 195);
+
+        // Kotak QR Code
+        const qrBoxSize = 420;
+        const qrX = (canvas.width - qrBoxSize) / 2;
+        const qrY = 235;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(qrX, qrY, qrBoxSize, qrBoxSize);
+        ctx.drawImage(qrImg, qrX + 16, qrY + 16, qrBoxSize - 32, qrBoxSize - 32);
+
+        // Unique Pass ID
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#666666';
+        ctx.font = 'bold 18px monospace';
+        ctx.fillText('UNIQUE PASS ID', canvas.width / 2, 705);
+
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 36px monospace';
+        ctx.fillText(currentPassData.pass_code, canvas.width / 2, 748);
+
+        // Garis pemisah
+        ctx.beginPath();
+        ctx.moveTo(56, 785);
+        ctx.lineTo(canvas.width - 56, 785);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Detail User
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#666666';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('NAMA PESERTA', 56, 825);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillText(String(currentPassData.full_name).slice(0, 36), 56, 858);
+
+        ctx.fillStyle = '#666666';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('WHATSAPP', 56, 905);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText(`+${currentPassData.whatsapp_number}`, 56, 935);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#666666';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('TERDAFTAR (WITA)', canvas.width - 56, 905);
+        ctx.fillStyle = '#000000';
+        ctx.font = '20px monospace';
+        ctx.fillText(currentPassData.submitted_at_wita, canvas.width - 56, 935);
+
+        const link = document.createElement('a');
+        link.download = `PASS-${currentPassData.pass_code}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }
+
+      async function evaluateQrAccess() {
+        if (!slug) {
+          showBlocked('Parameter QR Hilang', 'Silakan pindai QR Code resmi yang diberikan oleh penyelenggara.', 'INVALID URL');
           return;
         }
 
-        state.slug = slug;
-        switchView('view-loading');
+        // Cek apakah user sudah pernah submit untuk QR slug ini di perangkat ini
+        const savedToken = localStorage.getItem(storageKey);
+        if (savedToken && /^[a-f0-9]{64}$/i.test(savedToken)) {
+          try {
+            const passRes = await fetch(`/api/public/pass/${encodeURIComponent(savedToken)}`);
+            if (passRes.ok) {
+              const passJson = await passRes.json();
+              if (passJson.success && passJson.data) {
+                showPassCard(passJson.data);
+                return;
+              }
+            } else {
+              localStorage.removeItem(storageKey);
+            }
+          } catch {
+            // Lanjutkan ke pengecekan QR normal jika gagal memuat pass tersimpan
+          }
+        }
+
+        if (presetStatus === 'not_found') {
+          showBlocked('QR Code Tidak Ditemukan', 'Tautan QR Code tidak valid atau telah dihapus.', '404 NOT FOUND');
+          return;
+        }
 
         try {
-          const response = await fetch('/api/public/scan', {
+          const res = await fetch('/api/public/scan', {
             method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ slug })
           });
 
-          const payload = await response.json().catch(() => ({}));
+          const data = await res.json();
 
-          if (response.status === 404 || payload.status === 'not_found') {
-            document.getElementById('not-found-message').textContent =
-              payload.message || 'QR Code tidak ditemukan atau sudah dihapus.';
-            switchView('view-not-found');
+          if (!res.ok || data.status === 'not_found') {
+            showBlocked('QR Code Tidak Ditemukan', data.message || 'QR Code tidak tersedia.', 'NOT FOUND');
             return;
           }
 
-          const status = payload.status || urlStatus;
-          const qr = payload.qr || null;
-          state.qrData = qr;
-
-          if (status === 'limit_reached') {
-            if (qr) {
-              document.getElementById('limit-qr-name').textContent = qr.name || slug;
-              document.getElementById('limit-qr-quota').textContent = `${qr.unique_access ?? qr.max_access} / ${qr.max_access} Unique User`;
-              document.getElementById('limit-qr-meta').classList.remove('hidden');
-            }
-            switchView('view-limit-reached');
+          if (data.status === 'limit_reached') {
+            showBlocked('Kuota Akses Penuh', data.message, 'LIMIT REACHED');
             return;
           }
 
-          if (status === 'expired') {
-            if (qr) {
-              document.getElementById('expired-qr-name').textContent = qr.name || slug;
-              document.getElementById('expired-qr-date').textContent = `${qr.expires_at_wita || '-'} WITA`;
-              document.getElementById('expired-qr-meta').classList.remove('hidden');
-            }
-            switchView('view-expired');
+          if (data.status === 'expired') {
+            showBlocked('Masa Berlaku Habis', data.message, 'EXPIRED');
             return;
           }
 
-          if (status === 'disabled') {
-            if (qr && qr.name) {
-              document.getElementById('disabled-qr-name').textContent = `"${qr.name}"`;
-            }
-            switchView('view-disabled');
+          if (data.status === 'disabled') {
+            showBlocked('QR Dinonaktifkan', data.message, 'DISABLED');
             return;
           }
 
-          populateQrBranding(qr);
-
-          if (status === 'pin_required') {
-            switchView('view-pin-gate');
-            document.getElementById('pin-input').focus();
+          if (data.status === 'pin_required') {
+            hideAllStates();
+            document.getElementById('pinQrName').textContent = data.qr.name;
+            document.getElementById('statePin').classList.remove('hidden');
             return;
           }
 
-          if (status === 'valid') {
-            switchView('view-identity-form');
-            document.getElementById('full-name').focus();
-            return;
+          // Status valid -> tampilkan form registrasi
+          hideAllStates();
+          document.getElementById('formQrName').textContent = data.qr.name;
+          document.getElementById('formQuotaMeta').textContent =
+            `Sisa Kuota: ${data.qr.remaining_access} / ${data.qr.max_access} • Berlaku s/d ${data.qr.expires_at_wita} WITA`;
+
+          const logoEl = document.getElementById('formQrLogo');
+          if (data.qr.logo_url) {
+            logoEl.src = data.qr.logo_url;
+            logoEl.classList.remove('hidden');
           }
 
-          switchView('view-not-found');
+          document.getElementById('stateForm').classList.remove('hidden');
         } catch {
-          document.getElementById('not-found-message').textContent =
-            'Gagal terhubung ke server verifikasi. Periksa koneksi internet Anda lalu muat ulang halaman.';
-          switchView('view-not-found');
+          showBlocked('Gangguan Koneksi', 'Gagal menghubungi server. Silakan muat ulang halaman.', 'NETWORK ERROR');
         }
       }
 
-      // ======================================================================
-      // 5. PIN VERIFICATION HANDLER (POST /api/public/verify-pin)
-      // ======================================================================
-      const pinForm = document.getElementById('pin-form');
-      const pinInput = document.getElementById('pin-input');
-      const togglePinBtn = document.getElementById('toggle-pin-btn');
-      const pinErrorBanner = document.getElementById('pin-error-banner');
-      const pinErrorText = document.getElementById('pin-error-text');
-      const verifyPinBtn = document.getElementById('verify-pin-btn');
-      const verifyPinSpinner = document.getElementById('verify-pin-spinner');
-      const verifyPinLabel = document.getElementById('verify-pin-label');
-
-      togglePinBtn.addEventListener('click', () => {
-        const isPassword = pinInput.type === 'password';
-        pinInput.type = isPassword ? 'text' : 'password';
-        togglePinBtn.textContent = isPassword ? 'Hide' : 'Show';
-        pinInput.focus();
-      });
-
-      pinInput.addEventListener('input', () => {
-        pinInput.value = pinInput.value.replace(/\D/g, '').slice(0, 8);
-        pinErrorBanner.classList.add('hidden');
-      });
-
-      pinForm.addEventListener('submit', async (e) => {
+      // Event Listeners
+      document.getElementById('pinForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        pinErrorBanner.classList.add('hidden');
-
-        const pinVal = pinInput.value.trim();
-        if (!/^\d{4,8}$/.test(pinVal)) {
-          pinErrorText.textContent = 'PIN harus terdiri dari 4 hingga 8 digit angka.';
-          pinErrorBanner.classList.remove('hidden');
-          pinInput.focus();
-          return;
-        }
-
-        verifyPinBtn.disabled = true;
-        pinInput.disabled = true;
-        verifyPinSpinner.classList.remove('hidden');
-        verifyPinLabel.textContent = 'Memverifikasi PIN...';
+        const pin = document.getElementById('inputPin').value.trim();
+        const btn = document.getElementById('btnSubmitPin');
+        btn.disabled = true;
+        btn.textContent = 'Memverifikasi...';
 
         try {
           const res = await fetch('/api/public/verify-pin', {
             method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              slug: state.slug,
-              pin: pinVal
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, pin })
           });
-
-          const data = await res.json().catch(() => ({}));
-
+          const data = await res.json();
           if (!res.ok || !data.success) {
-            if (data.status === 'limit_reached') {
-              switchView('view-limit-reached');
-              return;
-            }
-            if (data.status === 'expired') {
-              switchView('view-expired');
-              return;
-            }
-
-            const errMsg = data.message || 'PIN yang Anda masukkan salah.';
-            pinErrorText.textContent = errMsg;
-            pinErrorBanner.classList.remove('hidden');
-            showToast('error', 'PIN Ditolak', errMsg);
-            pinInput.value = '';
-            pinInput.disabled = false;
-            verifyPinBtn.disabled = false;
-            verifyPinSpinner.classList.add('hidden');
-            verifyPinLabel.textContent = 'Verifikasi PIN →';
-            pinInput.focus();
+            showToast(data.message || 'PIN salah.', 'error');
             return;
           }
-
-          showToast('success', 'PIN Valid', 'Silakan lengkapi formulir identitas Anda.', 2500);
-          switchView('view-identity-form');
-          document.getElementById('full-name').focus();
+          showToast('PIN terverifikasi.');
+          await evaluateQrAccess();
         } catch {
-          pinErrorText.textContent = 'Koneksi terputus saat memverifikasi PIN. Silakan coba lagi.';
-          pinErrorBanner.classList.remove('hidden');
-          pinInput.disabled = false;
-          verifyPinBtn.disabled = false;
-          verifyPinSpinner.classList.add('hidden');
-          verifyPinLabel.textContent = 'Verifikasi PIN →';
+          showToast('Terjadi kesalahan jaringan.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Verifikasi PIN';
         }
       });
 
-      // ======================================================================
-      // 6. KTP FILE UPLOAD (FILEREADER -> BASE64) & VALIDATION
-      // ======================================================================
-      const ktpFileInput = document.getElementById('ktp-file-input');
-      const selectKtpBtn = document.getElementById('select-ktp-btn');
-      const changeKtpBtn = document.getElementById('change-ktp-btn');
-      const ktpEmptyPicker = document.getElementById('ktp-empty-picker');
-      const ktpPreviewContainer = document.getElementById('ktp-preview-container');
-      const ktpPreviewImg = document.getElementById('ktp-preview-img');
-      const ktpFileMeta = document.getElementById('ktp-file-meta');
-      const errKtpEl = document.getElementById('err-ktp');
-
-      selectKtpBtn.addEventListener('click', () => ktpFileInput.click());
-      changeKtpBtn.addEventListener('click', () => ktpFileInput.click());
-
-      ktpFileInput.addEventListener('change', (e) => {
-        const file = e.target.files?.[0];
-        errKtpEl.classList.add('hidden');
-
+      document.getElementById('inputKtpFile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
         if (!file) return;
 
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-        if (!allowedTypes.includes(file.type)) {
-          errKtpEl.textContent = '> Format foto KTP hanya mendukung JPG, PNG, atau WEBP.';
-          errKtpEl.classList.remove('hidden');
-          showToast('error', 'Format Tidak Didukung', 'Unggah foto KTP dalam format JPG, PNG, atau WEBP.');
-          ktpFileInput.value = '';
-          return;
+        try {
+          compressedKtpBase64 = await compressImageToBase64(file);
+          const previewEl = document.getElementById('ktpPreviewImg');
+          previewEl.src = compressedKtpBase64;
+          previewEl.classList.remove('hidden');
+          document.getElementById('ktpUploadPrompt').classList.add('hidden');
+        } catch (err) {
+          compressedKtpBase64 = '';
+          showToast(err.message || 'Gagal memproses gambar KTP.', 'error');
         }
-
-        const maxBytes = 5 * 1024 * 1024;
-        if (file.size > maxBytes) {
-          errKtpEl.textContent = '> Ukuran file KTP maksimal 5 MB.';
-          errKtpEl.classList.remove('hidden');
-          showToast('error', 'Ukuran Terlalu Besar', 'Ukuran foto KTP maksimal 5 MB.');
-          ktpFileInput.value = '';
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = () => {
-          state.ktpBase64 = reader.result;
-          ktpPreviewImg.src = reader.result;
-          ktpFileMeta.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-          ktpEmptyPicker.classList.add('hidden');
-          ktpPreviewContainer.classList.remove('hidden');
-        };
-        reader.onerror = () => {
-          errKtpEl.textContent = '> Gagal membaca file gambar KTP.';
-          errKtpEl.classList.remove('hidden');
-          showToast('error', 'Gagal Membaca File', 'Tidak dapat membaca gambar dari perangkat Anda.');
-        };
-        reader.readAsDataURL(file);
       });
 
-      // ======================================================================
-      // 7. IDENTITY FORM VALIDATION & SUBMISSION (POST /api/public/submit)
-      // ======================================================================
-      const identityForm = document.getElementById('identity-form');
-      const fullNameInput = document.getElementById('full-name');
-      const whatsappInput = document.getElementById('whatsapp-number');
-      const errFullNameEl = document.getElementById('err-full-name');
-      const errWhatsappEl = document.getElementById('err-whatsapp');
-      const identityErrorBanner = document.getElementById('identity-error-banner');
-      const identityErrorText = document.getElementById('identity-error-text');
-
-      const submitIdentityBtn = document.getElementById('submit-identity-btn');
-      const submitIdentitySpinner = document.getElementById('submit-identity-spinner');
-      const submitIdentityLabel = document.getElementById('submit-identity-label');
-      const submitIdentityArrow = document.getElementById('submit-identity-arrow');
-
-      document.getElementById('dismiss-identity-err-btn').addEventListener('click', () => {
-        identityErrorBanner.classList.add('hidden');
-      });
-
-      fullNameInput.addEventListener('input', () => {
-        errFullNameEl.classList.add('hidden');
-        identityErrorBanner.classList.add('hidden');
-      });
-
-      whatsappInput.addEventListener('input', () => {
-        // Kode negara +62 sudah tampil di depan field: hanya terima digit sisanya
-        let v = whatsappInput.value.replace(/\D/g, '');
-        if (v.startsWith('62')) v = v.slice(2);   // jika user paste 62xxxx
-        v = v.replace(/^0+/, '');                  // buang awalan 0 (0812... -> 812...)
-        whatsappInput.value = v.slice(0, 13);
-        errWhatsappEl.classList.add('hidden');
-        identityErrorBanner.classList.add('hidden');
-      });
-
-      function normalizeAndValidateWa(rawVal) {
-        const local = String(rawVal || '').replace(/[\s\-().+]/g, '');
-        const digits = '62' + local;
-        if (!/^628[1-9][0-9]{7,11}$/.test(digits)) {
-          return null;
-        }
-        return digits;
-      }
-
-      function validateIdentityForm() {
-        let valid = true;
-        errFullNameEl.classList.add('hidden');
-        errWhatsappEl.classList.add('hidden');
-        errKtpEl.classList.add('hidden');
-        identityErrorBanner.classList.add('hidden');
-
-        const fullName = fullNameInput.value.trim();
-        if (fullName.length < 2 || fullName.length > 150) {
-          errFullNameEl.textContent = '> Nama lengkap wajib diisi (minimal 2 karakter).';
-          errFullNameEl.classList.remove('hidden');
-          valid = false;
-        }
-
-        const rawWa = whatsappInput.value.trim();
-        const normalizedWa = normalizeAndValidateWa(rawWa);
-        if (!normalizedWa) {
-          errWhatsappEl.textContent = '> Isi nomor setelah +62 (contoh: 81234567890, 9–13 digit).';
-          errWhatsappEl.classList.remove('hidden');
-          valid = false;
-        }
-
-        if (!state.ktpBase64) {
-          errKtpEl.textContent = '> Foto KTP wajib diunggah sebelum melanjutkan.';
-          errKtpEl.classList.remove('hidden');
-          valid = false;
-        }
-
-        return valid;
-      }
-
-      function setIdentityLoading(isLoading) {
-        submitIdentityBtn.disabled = isLoading;
-        fullNameInput.disabled = isLoading;
-        whatsappInput.disabled = isLoading;
-        selectKtpBtn.disabled = isLoading;
-        changeKtpBtn.disabled = isLoading;
-
-        if (isLoading) {
-          submitIdentitySpinner.classList.remove('hidden');
-          submitIdentityArrow.classList.add('hidden');
-          submitIdentityLabel.textContent = 'Mengunggah & Memverifikasi...';
-        } else {
-          submitIdentitySpinner.classList.add('hidden');
-          submitIdentityArrow.classList.remove('hidden');
-          submitIdentityLabel.textContent = 'Kirim Data & Lanjutkan';
-        }
-      }
-
-      function showSuccessScreen(submissionData, submittedName, submittedWa) {
-        document.getElementById('success-user-name').textContent = submittedName;
-        document.getElementById('success-user-wa').textContent = submittedWa;
-        document.getElementById('success-qr-name').textContent = submissionData.qr_name || state.qrData?.name || state.slug;
-        document.getElementById('success-submitted-at').textContent = submissionData.submitted_at_wita
-          ? `${submissionData.submitted_at_wita} WITA`
-          : 'Baru saja';
-
-        const destUrl = submissionData.destination_url;
-        const destBtn = document.getElementById('destination-link-btn');
-        const autoRedirectText = document.getElementById('auto-redirect-text');
-        const cancelAutoBtn = document.getElementById('cancel-auto-redirect-btn');
-
-        if (isSafeHttpUrl(destUrl)) {
-          destBtn.href = destUrl;
-          switchView('view-success');
-
-          state.redirectSecondsLeft = 5;
-          autoRedirectText.textContent = `Mengalihkan otomatis dalam ${state.redirectSecondsLeft} detik...`;
-
-          state.redirectTimer = setInterval(() => {
-            state.redirectSecondsLeft -= 1;
-            if (state.redirectSecondsLeft <= 0) {
-              clearInterval(state.redirectTimer);
-              autoRedirectText.textContent = 'Mengalihkan ke halaman tujuan...';
-              window.location.href = destUrl;
-            } else {
-              autoRedirectText.textContent = `Mengalihkan otomatis dalam ${state.redirectSecondsLeft} detik...`;
-            }
-          }, 1000);
-
-          cancelAutoBtn.addEventListener('click', () => {
-            if (state.redirectTimer) {
-              clearInterval(state.redirectTimer);
-              state.redirectTimer = null;
-            }
-            autoRedirectText.textContent = 'Pengalihan otomatis dihentikan.';
-            cancelAutoBtn.classList.add('hidden');
-          });
-        } else {
-          destBtn.classList.add('hidden');
-          autoRedirectText.textContent = 'Data berhasil disimpan.';
-          cancelAutoBtn.classList.add('hidden');
-          switchView('view-success');
-        }
-      }
-
-      identityForm.addEventListener('submit', async (e) => {
+      document.getElementById('identityForm').addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        if (!validateIdentityForm()) {
-          showToast('warning', 'Data Belum Lengkap', 'Periksa kembali Nama, Nomor WhatsApp (628...), dan Foto KTP.');
+        const fullName = document.getElementById('inputFullName').value.trim();
+        let whatsapp = document.getElementById('inputWhatsapp').value.replace(/[\s\-().+]/g, '');
+        if (whatsapp.startsWith('08')) {
+          whatsapp = '62' + whatsapp.slice(1);
+        }
+
+        if (!compressedKtpBase64) {
+          showToast('Silakan unggah foto KTP terlebih dahulu.', 'error');
           return;
         }
 
-        const fullName = fullNameInput.value.trim();
-        const normalizedWa = normalizeAndValidateWa(whatsappInput.value.trim());
-
-        setIdentityLoading(true);
+        const btn = document.getElementById('btnSubmitIdentity');
+        btn.disabled = true;
+        btn.textContent = 'Menyimpan & Membuat QR Pass...';
 
         try {
-          const response = await fetch('/api/public/submit', {
+          const res = await fetch('/api/public/submit', {
             method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              slug: state.slug,
+              slug,
               full_name: fullName,
-              whatsapp_number: normalizedWa,
-              ktp_base64: state.ktpBase64
+              whatsapp_number: whatsapp,
+              ktp_base64: compressedKtpBase64
             })
           });
 
-          const data = await response.json().catch(() => ({}));
-
-          if (!response.ok || !data.success) {
-            if (data.status === 'limit_reached') {
-              switchView('view-limit-reached');
-              return;
-            }
-            if (data.status === 'expired') {
-              switchView('view-expired');
-              return;
-            }
-            if (data.status === 'pin_required') {
-              switchView('view-pin-gate');
-              showToast('warning', 'PIN Diperlukan', data.message || 'Silakan verifikasi PIN kembali.');
-              setIdentityLoading(false);
-              return;
-            }
-
-            const errMsg = data.message || 'Gagal menyimpan data identitas. Silakan coba lagi.';
-            identityErrorText.textContent = errMsg;
-            identityErrorBanner.classList.remove('hidden');
-            showToast('error', 'Pengiriman Gagal', errMsg);
-            setIdentityLoading(false);
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            showToast(data.message || 'Gagal mengirim formulir.', 'error');
             return;
           }
 
-          showToast('success', 'Berhasil Disimpan', 'Identitas Anda telah diverifikasi.', 2500);
-          showSuccessScreen(data.data || {}, fullName, normalizedWa);
+          if (storageKey && data.data.pass_token) {
+            localStorage.setItem(storageKey, data.data.pass_token);
+          }
+
+          showToast('Registrasi berhasil! QR Pass Anda telah diterbitkan.');
+          showPassCard(data.data);
         } catch {
-          const netMsg = 'Koneksi terputus saat mengunggah data. Periksa jaringan Anda lalu coba lagi.';
-          identityErrorText.textContent = netMsg;
-          identityErrorBanner.classList.remove('hidden');
-          showToast('error', 'Koneksi Terputus', netMsg);
-          setIdentityLoading(false);
+          showToast('Gangguan jaringan saat mengirim data.', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Kirim Data & Dapatkan QR Pass';
         }
       });
 
-      // Start verification on load
-      window.addEventListener('DOMContentLoaded', () => {
-        verifyQrOnLoad();
-      });
+      document.getElementById('btnDownloadPassCard').addEventListener('click', downloadPassAsPngCard);
+
+      evaluateQrAccess();
     })();
   </script>
 </body>
